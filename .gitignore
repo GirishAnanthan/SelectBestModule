@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Streamlit
+*.streamlit/
+
+# Generated charts & reports
+chart_*.png
+*.pdf
+fin_results.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
