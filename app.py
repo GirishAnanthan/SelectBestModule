@@ -149,10 +149,8 @@ def handle_module(col, label, default_tech):
         return specs
     return None
 
-with col1:
-    specs_a = handle_module(col1, "Module 1", "Mono PERC")
-with col2:
-    specs_b = handle_module(col2, "Module 2", "N-TOPCon")
+specs_a = handle_module(col1, "Module 1", "Mono PERC")
+specs_b = handle_module(col2, "Module 2", "N-TOPCon")
 
 # Store uploaded filenames for report naming
 uploaded_a = st.session_state.get("upload_Module 1")
