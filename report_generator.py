@@ -15,46 +15,46 @@ class SolarReport(FPDF):
         self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", align="C")
 
     def stitle(self, t):
-        self.set_font("Helvetica", "B", 14)
+        self.set_font("Helvetica", "B", 11)
         self.set_text_color(0, 51, 102)
-        self.cell(0, 10, t, new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 6, t, new_x="LMARGIN", new_y="NEXT")
         self.set_draw_color(0, 51, 102)
         self.line(10, self.get_y(), 200, self.get_y())
-        self.ln(4)
+        self.ln(1.5)
 
     def ptext(self, t):
-        self.set_font("Helvetica", "", 10)
+        self.set_font("Helvetica", "", 8.5)
         self.set_text_color(30, 30, 30)
-        self.multi_cell(0, 5.5, t)
-        self.ln(2)
+        self.multi_cell(0, 4, t)
+        self.ln(0.5)
 
     def bul(self, t):
-        self.set_font("Helvetica", "", 10)
+        self.set_font("Helvetica", "", 8.5)
         self.set_text_color(30, 30, 30)
         self.set_x(self.l_margin)
-        self.cell(5, 5.5, "-")
-        self.set_x(self.l_margin + 8)
-        self.multi_cell(self.w - self.l_margin - self.r_margin - 8, 5.5, t)
+        self.cell(3.5, 4, "-")
+        self.set_x(self.l_margin + 5)
+        self.multi_cell(self.w - self.l_margin - self.r_margin - 5, 4, t)
         self.set_x(self.l_margin)
 
-    def box(self, label, value, sub="", x=None, y=None, w=60, h=22):
+    def box(self, label, value, sub="", x=None, y=None, w=55, h=18):
         if x is None: x, y = self.get_x(), self.get_y()
         self.set_draw_color(0, 51, 102)
         self.set_fill_color(240, 245, 255)
         self.rect(x, y, w, h, style="DF")
-        self.set_xy(x+3, y+2)
-        self.set_font("Helvetica", "B", 9)
+        self.set_xy(x+2, y+1.5)
+        self.set_font("Helvetica", "B", 8)
         self.set_text_color(0, 51, 102)
-        self.cell(w-6, 4, label)
-        self.set_xy(x+3, y+7)
-        self.set_font("Helvetica", "B", 14)
+        self.cell(w-4, 3.5, label)
+        self.set_xy(x+2, y+5.5)
+        self.set_font("Helvetica", "B", 12)
         self.set_text_color(0, 0, 0)
-        self.cell(w-6, 7, value)
+        self.cell(w-4, 6, value)
         if sub:
-            self.set_xy(x+3, y+16)
+            self.set_xy(x+2, y+13)
             self.set_font("Helvetica", "I", 7)
             self.set_text_color(100, 100, 100)
-            self.cell(w-6, 4, sub)
+            self.cell(w-4, 3.5, sub)
 
     def add_image(self, path, w=170):
         if os.path.exists(path):
@@ -63,7 +63,7 @@ class SolarReport(FPDF):
         else:
             self.ptext(f"[Chart not found: {path}]")
 
-    def keep_with(self, chart_path, text, chart_w=None, margin=8):
+    def keep_with(self, chart_path, text, chart_w=None, margin=3):
         """Add chart and its explanation text on the same page.
         Inserts page break if insufficient space remains."""
         if not os.path.exists(chart_path):
@@ -73,7 +73,7 @@ class SolarReport(FPDF):
             iw, ih = im.size
         except:
             iw, ih = 1000, 600
-        cw = chart_w if chart_w else (self.w - 2 * self.l_margin)
+        cw = chart_w if chart_w else int((self.w - 2 * self.l_margin) * 0.62)
         ch = ih * cw / iw
         tw = self.w - self.l_margin - self.r_margin
         avg_char_w = 2.8
@@ -88,22 +88,22 @@ class SolarReport(FPDF):
             self.ptext(t)
 
     def tbl_hdr(self, col_w, headers):
-        self.set_font("Helvetica", "B", 9)
+        self.set_font("Helvetica", "B", 8)
         self.set_fill_color(0, 51, 102)
         self.set_text_color(255, 255, 255)
         for i, h in enumerate(headers):
-            self.cell(col_w[i], 7, h, border=1, align="C", fill=True, new_x="RIGHT", new_y="TOP")
+            self.cell(col_w[i], 5.5, h, border=1, align="C", fill=True, new_x="RIGHT", new_y="TOP")
         self.ln()
 
     def tbl_row(self, col_w, cells, bold=False, fill=False):
-        self.set_font("Helvetica", "B" if bold else "", 8)
+        self.set_font("Helvetica", "B" if bold else "", 7.5)
         self.set_text_color(0, 0, 0)
         if fill:
             self.set_fill_color(220, 230, 245)
         else:
             self.set_fill_color(255, 255, 255)
         for i, c in enumerate(cells):
-            self.cell(col_w[i], 5.5, c, border=1, align="L" if i == 0 else "C",
+            self.cell(col_w[i], 5, c, border=1, align="L" if i == 0 else "C",
                       fill=fill or bold, new_x="RIGHT", new_y="TOP")
         self.ln()
 
@@ -123,36 +123,32 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf = SolarReport()
     pdf.header_text = f"{info.get('project_name', 'Solar Plant')} | Techno Commercial Comparison"
     pdf.alias_nb_pages()
-    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.set_auto_page_break(auto=True, margin=15)
 
     # ====== COVER ======
     pdf.add_page()
-    pdf.ln(40)
+    pdf.ln(15)
     pdf.set_font("Helvetica", "B", 28)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 15, "TECHNO COMMERCIAL COMPARISON", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "", 18)
+    pdf.cell(0, 12, "TECHNO COMMERCIAL COMPARISON", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 16)
     pdf.set_text_color(60, 60, 60)
-    pdf.cell(0, 10, f"{info.get('plant_capacity', 'XX')} MW DC Solar Photovoltaic Plant", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 10, info.get('location', 'Location Not Specified'), align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(10)
+    pdf.cell(0, 8, f"{info.get('plant_capacity', 'XX')} MW DC Solar Plant - {info.get('location', '')}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(5)
     pdf.set_draw_color(0, 51, 102)
     pdf.line(60, pdf.get_y(), 150, pdf.get_y())
-    pdf.ln(10)
-    pdf.set_font("Helvetica", "", 13)
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(80, 80, 80)
-    pdf.cell(0, 8, "Techno Commercial Comparison & Module Selection Analysis", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 8, f"{info.get('module_a_name', 'Module A')} vs {info.get('module_b_name', 'Module B')}", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(12)
-    pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 7, f"Prepared for: {info.get('customer_name', 'Client')}", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 7, f"Company: {info.get('customer_company', 'N/A')}", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 7, f"Date: {info.get('date', 'July 2026')}", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(10)
-    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 7, f"{info.get('module_a_name', 'Module A')} vs {info.get('module_b_name', 'Module B')}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(8)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Prepared for: {info.get('customer_name', 'Client')} | {info.get('customer_company', 'N/A')}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, f"Date: {info.get('date', 'July 2026')}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(120, 120, 120)
-    pdf.multi_cell(0, 6,
+    pdf.multi_cell(0, 4.5,
         "Disclaimer: This report is based on manufacturer datasheets and standard financial modeling assumptions. "
         "Actual returns may vary based on site conditions, financing terms, and prevailing tariff rates.")
 
@@ -172,9 +168,9 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         f"Generation estimates incorporate site-specific simulation parameters including "
         f"GHI, POA irradiance, and Performance Ratio.")
 
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 8, "Key Findings:", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "Key Findings:", new_x="LMARGIN", new_y="NEXT")
     pdf.bul(f"{info.get('module_a_short', 'Mod A')} yields an Equity IRR of {r['irr']*100:.2f}%, "
             f"compared to {info.get('module_b_short', 'Mod B')}'s {w['irr']*100:.2f}%")
     pdf.bul(f"{info.get('module_b_short', 'Mod B')} offers NPV of Rs. {w['npv']/1e7:.2f} Cr "
@@ -184,25 +180,22 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.bul(f"Both modules achieve payback within {r['payback']} years")
     pdf.bul(f"{info.get('module_b_short', 'Mod B')} generates "
             f"{((w['total_gen_kwh']/r['total_gen_kwh'])-1)*100:.1f}% more lifetime energy")
-    pdf.ln(2)
-
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 8, "Recommendation:", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "Recommendation:", new_x="LMARGIN", new_y="NEXT")
 
     best_is_a = r['irr'] >= w['irr']
     best_name = info.get('module_a_name' if best_is_a else 'module_b_name', 'Module A' if best_is_a else 'Module B')
     best_irr = r['irr'] if best_is_a else w['irr']
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(200, 50, 0)
-    pdf.multi_cell(0, 6,
+    pdf.multi_cell(0, 5,
         f"Based on the comprehensive analysis, {best_name} is RECOMMENDED for the investor "
         f"seeking higher Equity IRR ({best_irr*100:.2f}%). "
         f"The final decision should align with the investor's return expectations and risk appetite.")
-    pdf.ln(3)
+    pdf.ln(1)
 
     # ====== 2. PROJECT BACKGROUND ======
-    pdf.add_page()
     pdf.stitle("2. Project Background")
     mounting_display = info.get('mounting_type', 'Fixed Tilt')
     if info.get('tilt_angle'):
@@ -219,9 +212,9 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         pdf.bul(param)
 
     pdf.ln(2)
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 7, "Site-Specific CUF Assumptions:", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "Site-Specific CUF Assumptions:", new_x="LMARGIN", new_y="NEXT")
     pdf.bul(f"{info.get('module_a_short', 'Mod A')}: {r['cuf']*100:.1f}%")
     pdf.bul(f"{info.get('module_b_short', 'Mod B')}: {w['cuf']*100:.1f}% - Superior low-light & temperature performance")
     pdf.ln(2)
@@ -254,7 +247,6 @@ def generate_report(r, w, project_info, chart_dir, output_path):
             pdf.tbl_row(pv_col, row, fill=i % 2 == 1)
 
     # ====== 3. TECHNICAL SPECIFICATIONS ======
-    pdf.add_page()
     pdf.stitle("3. Module Technical Specifications")
     pdf.ptext("The following specifications are extracted from manufacturer datasheets.")
     pdf.ln(1)
@@ -265,13 +257,11 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         pdf.tbl_row(col, row, fill=info.get('spec_rows', []).index(row) % 2 == 1)
 
     # ====== 4. FINANCIAL ANALYSIS ======
-    pdf.add_page()
     pdf.stitle("4. Financial Analysis & Projections")
 
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 7, "4.1 Capital Expenditure (CAPEX)", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(1)
+    pdf.cell(0, 6, "4.1 Capital Expenditure (CAPEX)", new_x="LMARGIN", new_y="NEXT")
     pdf.ptext(
         f"Total project cost: Rs. {r['total_cost']/1e7:.2f} Cr ({info.get('module_a_short','A')}) "
         f"vs Rs. {w['total_cost']/1e7:.2f} Cr ({info.get('module_b_short','B')}). "
@@ -326,7 +316,6 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         "compounds over the project life and is a key driver of the NPV and IRR differentials.")
 
     # 4.3 Cash Flow
-    pdf.add_page()
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(0, 51, 102)
     pdf.cell(0, 7, "4.3 Cash Flow Analysis & Returns", new_x="LMARGIN", new_y="NEXT")
