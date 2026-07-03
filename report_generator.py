@@ -265,6 +265,14 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     if os.path.exists(pie_path):
         img = pdf.image(pie_path, x=55, w=100)
         pdf.ln(img.rendered_height + 4)
+    pdf.ptext(
+        "The cost breakdown chart illustrates the proportion of module cost versus balance-of-system "
+        "(BoS) costs including EPC, mounting structure, cables, connectors, DCDBs, and land. "
+        "Higher-wattage modules reduce the module count requirement, which lowers BoS costs proportionally "
+        "through reduced mounting hardware, cabling, and installation labor. The module cost typically "
+        "accounts for 55-65% of the total project cost depending on the selected module's price per watt. "
+        "This cost structure directly influences the project's total capital requirement and, consequently, "
+        "the equity needed and the debt service obligations.")
 
     # 4.2 Energy Generation
     pdf.set_font("Helvetica", "B", 11)
@@ -287,7 +295,16 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     gen_path = os.path.join(chart_dir, "chart_gen.png")
     if os.path.exists(gen_path):
         img = pdf.image(gen_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
-        pdf.ln(img.rendered_height + 6)
+        pdf.ln(img.rendered_height + 4)
+    pdf.ptext(
+        "The annual energy generation profile shows the progressive decline in output over the 25-year "
+        "project life due to module degradation. Year 1 generation is calculated using the site-specific "
+        "CUF derived from the location's solar insolation, mounting configuration, and module efficiency. "
+        "Two degradation phases are modeled: an initial first-year degradation followed by an annual linear "
+        "degradation for the remaining 24 years. Modules with lower temperature coefficients and lower "
+        "annual degradation rates maintain higher generation in later years, improving the project's "
+        "lifetime energy yield. The difference in total generation between the two module options "
+        "compounds over the project life and is a key driver of the NPV and IRR differentials.")
 
     # 4.3 Cash Flow
     pdf.add_page()
@@ -302,18 +319,43 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         img = pdf.image(fcf_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
         pdf.ln(img.rendered_height + 4)
     pdf.ptext(f"Cumulative FCF shows both modules reaching payback by Year {w['payback']}, with strong positive cash flows thereafter.")
+    pdf.ptext(
+        "The cumulative free cash flow chart tracks the equity investor's cash position over the project "
+        "life, starting from the initial equity investment (negative cash flow in Year 0). The payback "
+        "period is the year in which cumulative cash flows turn positive, indicating the time required "
+        "to recover the initial equity investment. Post-payback, the steepness of the curve reflects "
+        "the project's ongoing free cash flow generation, which is driven by revenue from energy sales "
+        "net of operating costs, interest payments, and taxes. A steeper post-payback curve indicates "
+        "higher returns to equity investors. The terminal value at Year 25 represents the total "
+        "cumulative wealth created by the investment.")
 
     dscr_path = os.path.join(chart_dir, "chart_dscr.png")
     if os.path.exists(dscr_path):
         img = pdf.image(dscr_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
         pdf.ln(img.rendered_height + 4)
     pdf.ptext("DSCR > 1.5x throughout the loan tenure confirms strong debt repayment capacity and bankability.")
+    pdf.ptext(
+        "The Debt Service Coverage Ratio (DSCR) measures the project's ability to service its debt "
+        "obligations, calculated as (Net Income + Depreciation + Interest) / (Principal + Interest). "
+        "Indian project finance lenders typically require a minimum DSCR of 1.3x-1.5x throughout the "
+        "loan tenure. A DSCR above this threshold throughout the debt period indicates comfortable "
+        "debt coverage even under stressed scenarios. The declining trend over time is expected as "
+        "generation degrades while debt payments remain fixed, though principal repayment reduces "
+        "the outstanding balance and ultimately lowers the debt service burden in later years of the tenure.")
 
     ni_path = os.path.join(chart_dir, "chart_net_income.png")
     if os.path.exists(ni_path):
         img = pdf.image(ni_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
         pdf.ln(img.rendered_height + 4)
     pdf.ptext("Net income after tax shows the long-term return profile for both module options.")
+    pdf.ptext(
+        "The net income after tax chart displays the project's profitability each year after accounting "
+        "for revenue, operating expenses, interest on debt, depreciation, and corporate income tax. "
+        "Net income is typically lower in the early years due to higher interest expenses and "
+        "accelerated depreciation benefits under WDV method. As the loan is repaid and interest costs "
+        "decline, net income rises and stabilizes. The cumulative net income over the project life "
+        "is a key indicator of overall profitability. The chart also highlights the impact of module "
+        "degradation: higher degradation modules show a steeper decline in net income in later years.")
 
     # ====== 5. METRICS COMPARISON ======
     pdf.stitle("5. Key Financial Metrics Comparison")
@@ -321,7 +363,18 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     irr_path = os.path.join(chart_dir, "chart_irr_npv.png")
     if os.path.exists(irr_path):
         img = pdf.image(irr_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
-        pdf.ln(img.rendered_height + 6)
+        pdf.ln(img.rendered_height + 4)
+    pdf.ptext(
+        "The Equity IRR and NPV comparison chart presents the two most widely used metrics for "
+        "investment decision-making. Equity IRR represents the annualized return on the equity "
+        "investment, accounting for the timing of all cash flows over the 25-year project life. "
+        "A higher IRR is preferred, and the metric is typically compared to the investor's hurdle "
+        "rate (usually 12-16% for Indian solar projects). NPV calculates the present value of all "
+        "future cash flows discounted at the weighted average cost of capital, with a positive NPV "
+        "indicating value creation above the cost of capital. While IRR favors projects with faster "
+        "capital recovery, NPV captures the absolute wealth creation. Together, these metrics provide "
+        "a complete picture: a module with higher IRR delivers better percentage returns on equity, "
+        "while a module with higher NPV generates greater absolute value over the project life.")
 
     cc2 = [72, 54, 54]
     pdf.tbl_hdr(cc2, ["Financial Metric", info.get('module_a_short','A'), info.get('module_b_short','B')])
