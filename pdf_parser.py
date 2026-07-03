@@ -67,35 +67,33 @@ def parse_specs(text, technology_hint=None):
     lines = text.split('\n')
 
     # Strategy A: Find electrical data table rows and extract Pmax from them
-    # Electrical data rows have format: Model/Name Pmax Vmp Imp Isc Voc Eff
-    # where Vmp/Imp/Isc/Voc are decimals (like 45.70, 13.35, etc.)
     for line in lines:
-        # Lines with electrical data have 4+ decimal numbers between 8 and 60
         decimals = [float(n) for n in re.findall(r'\b(\d+\.\d+)\b', line)]
-        # Filter to plausible electrical values
         elec_vals = [d for d in decimals if 8 <= d <= 60]
         if len(elec_vals) >= 4:
-            # This line likely has electrical data - extract integer power values
             ints = [int(n) for n in re.findall(r'\b(\d+)\b', line) if 300 <= int(n) <= 800]
             for v in ints:
                 all_powers.add(v)
 
-    # Strategy B: Find Pmax in headers
-    if not all_powers:
-        for pat in [
-            r'(?:Pmax|Max\s*Power|Maximum\s*Power)\s*(?:\(Wp?\)|\(Pmax\))?[:\s]*(\d+)\s*W',
-            r'(\d+)\s*Wp?\s*(?:\(STC\)|@\s*STC)',
-            r'^\s*(\d+)\s*[Ww](?:p)?\s*$',
-        ]:
-            for m in re.finditer(pat, text, re.IGNORECASE | re.MULTILINE):
-                val = int(m.group(1))
-                if 300 <= val <= 800:
-                    all_powers.add(val)
+    # Strategy B: Find power values after Pmax / Power keywords
+    for pat in [
+        r'(?:Pmax|Max\s*Power|Maximum\s*Power)\s*(?:\(Wp?\)|\(Pmax\))?[:\s]*(\d+)\s*W',
+        r'(\d+)\s*Wp?\s*(?:\(STC\)|@\s*STC)',
+        r'[-\s](\d{3})\s*[Ww](?:p)?\b',
+    ]:
+        for m in re.finditer(pat, text, re.IGNORECASE | re.MULTILINE):
+            val = int(m.group(1))
+            if 300 <= val <= 800:
+                all_powers.add(val)
+
+    # Strategy C: Find power values in model names (e.g. "G12R-600", "G12R 600W")
+    for m in re.finditer(r'[A-Za-z0-9]+[-\s](\d{3})(?:[Ww](?:p)?)?(?:\s|,|$|\))', text):
+        val = int(m.group(1))
+        if 300 <= val <= 800:
+            all_powers.add(val)
 
     if all_powers:
-        # Filter: keep only the highest cluster (STC values, not NOCT)
         sorted_powers = sorted(all_powers)
-        # If there's a gap > 50W between values, keep only the upper cluster
         if len(sorted_powers) > 1:
             max_gap_idx = 0
             max_gap = 0
@@ -105,7 +103,6 @@ def parse_specs(text, technology_hint=None):
                     max_gap = gap
                     max_gap_idx = i
             if max_gap > 50:
-                # Keep only the upper cluster
                 specs["power_options"] = sorted_powers[max_gap_idx+1:]
             else:
                 specs["power_options"] = sorted_powers
