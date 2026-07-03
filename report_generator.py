@@ -63,6 +63,30 @@ class SolarReport(FPDF):
         else:
             self.ptext(f"[Chart not found: {path}]")
 
+    def keep_with(self, chart_path, text, chart_w=None, margin=8):
+        """Add chart and its explanation text on the same page.
+        Inserts page break if insufficient space remains."""
+        if not os.path.exists(chart_path):
+            return
+        try:
+            im = Image.open(chart_path)
+            iw, ih = im.size
+        except:
+            iw, ih = 1000, 600
+        cw = chart_w if chart_w else (self.w - 2 * self.l_margin)
+        ch = ih * cw / iw
+        tw = self.w - self.l_margin - self.r_margin
+        avg_char_w = 2.8
+        lines = sum(max(1, len(t) // int(tw / avg_char_w) + 1) for t in (text if isinstance(text, list) else [text]))
+        text_h = lines * 5.5 + (len(text) if isinstance(text, list) else 1) * 2
+        needed = ch + margin + text_h
+        if self.get_y() + needed > self.h - self.b_margin:
+            self.add_page()
+        img = self.image(chart_path, x=self.l_margin, w=cw)
+        self.ln(img.rendered_height + 4)
+        for t in (text if isinstance(text, list) else [text]):
+            self.ptext(t)
+
     def tbl_hdr(self, col_w, headers):
         self.set_font("Helvetica", "B", 9)
         self.set_fill_color(0, 51, 102)
@@ -262,17 +286,15 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(2)
 
     pie_path = os.path.join(chart_dir, "chart_cost_pie.png")
-    if os.path.exists(pie_path):
-        img = pdf.image(pie_path, x=55, w=100)
-        pdf.ln(img.rendered_height + 4)
-    pdf.ptext(
+    pdf.keep_with(pie_path,
         "The cost breakdown chart illustrates the proportion of module cost versus balance-of-system "
         "(BoS) costs including EPC, mounting structure, cables, connectors, DCDBs, and land. "
         "Higher-wattage modules reduce the module count requirement, which lowers BoS costs proportionally "
         "through reduced mounting hardware, cabling, and installation labor. The module cost typically "
         "accounts for 55-65% of the total project cost depending on the selected module's price per watt. "
         "This cost structure directly influences the project's total capital requirement and, consequently, "
-        "the equity needed and the debt service obligations.")
+        "the equity needed and the debt service obligations.",
+        chart_w=100)
 
     # 4.2 Energy Generation
     pdf.set_font("Helvetica", "B", 11)
@@ -293,10 +315,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         f"Performance Ratio {pr_str}.")
 
     gen_path = os.path.join(chart_dir, "chart_gen.png")
-    if os.path.exists(gen_path):
-        img = pdf.image(gen_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
-        pdf.ln(img.rendered_height + 4)
-    pdf.ptext(
+    pdf.keep_with(gen_path,
         "The annual energy generation profile shows the progressive decline in output over the 25-year "
         "project life due to module degradation. Year 1 generation is calculated using the site-specific "
         "CUF derived from the location's solar insolation, mounting configuration, and module efficiency. "
@@ -315,11 +334,8 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ptext("The model incorporates revenue, O&M (3% escalation), insurance, debt servicing (15yr @ 9%), WDV depreciation, and corporate tax at 25.17%.")
 
     fcf_path = os.path.join(chart_dir, "chart_cumulative_fcf.png")
-    if os.path.exists(fcf_path):
-        img = pdf.image(fcf_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
-        pdf.ln(img.rendered_height + 4)
-    pdf.ptext(f"Cumulative FCF shows both modules reaching payback by Year {w['payback']}, with strong positive cash flows thereafter.")
-    pdf.ptext(
+    pdf.keep_with(fcf_path, [
+        f"Cumulative FCF shows both modules reaching payback by Year {w['payback']}, with strong positive cash flows thereafter.",
         "The cumulative free cash flow chart tracks the equity investor's cash position over the project "
         "life, starting from the initial equity investment (negative cash flow in Year 0). The payback "
         "period is the year in which cumulative cash flows turn positive, indicating the time required "
@@ -327,44 +343,38 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         "the project's ongoing free cash flow generation, which is driven by revenue from energy sales "
         "net of operating costs, interest payments, and taxes. A steeper post-payback curve indicates "
         "higher returns to equity investors. The terminal value at Year 25 represents the total "
-        "cumulative wealth created by the investment.")
+        "cumulative wealth created by the investment.",
+    ])
 
     dscr_path = os.path.join(chart_dir, "chart_dscr.png")
-    if os.path.exists(dscr_path):
-        img = pdf.image(dscr_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
-        pdf.ln(img.rendered_height + 4)
-    pdf.ptext("DSCR > 1.5x throughout the loan tenure confirms strong debt repayment capacity and bankability.")
-    pdf.ptext(
+    pdf.keep_with(dscr_path, [
+        "DSCR > 1.5x throughout the loan tenure confirms strong debt repayment capacity and bankability.",
         "The Debt Service Coverage Ratio (DSCR) measures the project's ability to service its debt "
         "obligations, calculated as (Net Income + Depreciation + Interest) / (Principal + Interest). "
         "Indian project finance lenders typically require a minimum DSCR of 1.3x-1.5x throughout the "
         "loan tenure. A DSCR above this threshold throughout the debt period indicates comfortable "
         "debt coverage even under stressed scenarios. The declining trend over time is expected as "
         "generation degrades while debt payments remain fixed, though principal repayment reduces "
-        "the outstanding balance and ultimately lowers the debt service burden in later years of the tenure.")
+        "the outstanding balance and ultimately lowers the debt service burden in later years of the tenure.",
+    ])
 
     ni_path = os.path.join(chart_dir, "chart_net_income.png")
-    if os.path.exists(ni_path):
-        img = pdf.image(ni_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
-        pdf.ln(img.rendered_height + 4)
-    pdf.ptext("Net income after tax shows the long-term return profile for both module options.")
-    pdf.ptext(
+    pdf.keep_with(ni_path, [
+        "Net income after tax shows the long-term return profile for both module options.",
         "The net income after tax chart displays the project's profitability each year after accounting "
         "for revenue, operating expenses, interest on debt, depreciation, and corporate income tax. "
         "Net income is typically lower in the early years due to higher interest expenses and "
         "accelerated depreciation benefits under WDV method. As the loan is repaid and interest costs "
         "decline, net income rises and stabilizes. The cumulative net income over the project life "
         "is a key indicator of overall profitability. The chart also highlights the impact of module "
-        "degradation: higher degradation modules show a steeper decline in net income in later years.")
+        "degradation: higher degradation modules show a steeper decline in net income in later years.",
+    ])
 
     # ====== 5. METRICS COMPARISON ======
     pdf.stitle("5. Key Financial Metrics Comparison")
 
     irr_path = os.path.join(chart_dir, "chart_irr_npv.png")
-    if os.path.exists(irr_path):
-        img = pdf.image(irr_path, x=pdf.l_margin, w=pdf.w - 2 * pdf.l_margin)
-        pdf.ln(img.rendered_height + 4)
-    pdf.ptext(
+    pdf.keep_with(irr_path,
         "The Equity IRR and NPV comparison chart presents the two most widely used metrics for "
         "investment decision-making. Equity IRR represents the annualized return on the equity "
         "investment, accounting for the timing of all cash flows over the 25-year project life. "
