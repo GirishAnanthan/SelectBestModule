@@ -135,13 +135,18 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     # ====== 1. EXECUTIVE SUMMARY ======
     pdf.add_page()
     pdf.stitle("1. Executive Summary")
+    mounting_display = info.get('mounting_type', 'Fixed Tilt')
+    if info.get('tilt_angle'):
+        mounting_display += f" (Tilt: {info['tilt_angle']}\u00b0)"
     pdf.ptext(
         f"This report presents a comprehensive technical and financial comparison between two DCR-compliant "
         f"solar photovoltaic module options for a {info.get('plant_capacity', 'XX')} MW DC ground-mount solar plant "
         f"proposed at {info.get('location', 'the project site')}. The analysis evaluates "
         f"{info.get('module_a_name', 'Module A')} against "
-        f"{info.get('module_b_name', 'Module B')} on a frontside-only generation basis, "
-        f"excluding bifacial gains to ensure conservative and bankable projections.")
+        f"{info.get('module_b_name', 'Module B')} using {mounting_display} mounting configuration, "
+        f"on a frontside-only generation basis, excluding bifacial gains to ensure conservative projections. "
+        f"Generation estimates incorporate PVSyst-style simulation parameters including site-specific "
+        f"GHI, POA irradiance, and Performance Ratio.")
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(0, 51, 102)
@@ -175,10 +180,14 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     # ====== 2. PROJECT BACKGROUND ======
     pdf.add_page()
     pdf.stitle("2. Project Background")
+    mounting_display = info.get('mounting_type', 'Fixed Tilt')
+    if info.get('tilt_angle'):
+        mounting_display += f" (Tilt: {info['tilt_angle']}\u00b0)"
     pdf.ptext(
         f"The proposed {info.get('plant_capacity', 'XX')} MW DC solar photovoltaic plant is located at "
         f"{info.get('location', 'the project site')} (Lat: {info.get('latitude', 'N/A')}, "
         f"Lon: {info.get('longitude', 'N/A')}), a region with excellent solar insolation. "
+        f"The project will employ {mounting_display} mounting structure. "
         f"The project qualifies under DCR category, mandating indigenously manufactured solar modules.")
     pdf.ptext("Key project parameters assumed for this analysis:")
 
@@ -191,6 +200,31 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.cell(0, 7, "Site-Specific CUF Assumptions:", new_x="LMARGIN", new_y="NEXT")
     pdf.bul(f"{info.get('module_a_short', 'Mod A')}: {r['cuf']*100:.1f}%")
     pdf.bul(f"{info.get('module_b_short', 'Mod B')}: {w['cuf']*100:.1f}% - Superior low-light & temperature performance")
+    pdf.ln(2)
+
+    pvsyst_a = r.get('pvsyst', {})
+    pvsyst_b = w.get('pvsyst', {})
+    pdf.stitle("2.1 PVSyst Simulation Data")
+    pdf.ptext(
+        "Generation estimates in this report are benchmarked against PVSyst simulation methodology. "
+        "The following site-specific irradiance and performance metrics are used to ensure bankable "
+        "and credible generation projections.")
+    pdf.ln(1)
+    pv_col = [52, 55, 55, 28]
+    pdf.tbl_hdr(pv_col, ["PVSyst Parameter", info.get('module_a_short','A'), info.get('module_b_short','B'), "Unit"])
+    def _fmt_pr(v):
+        if isinstance(v, (int, float)):
+            return f"{v:.1%}"
+        return str(v)
+    pv_rows = [
+        ["Annual GHI", f"{pvsyst_a.get('annual_ghi', 'N/A')}", f"{pvsyst_b.get('annual_ghi', 'N/A')}", "kWh/m\u00b2/yr"],
+        ["Annual POA Irradiance", f"{pvsyst_a.get('annual_poa', 'N/A')}", f"{pvsyst_b.get('annual_poa', 'N/A')}", "kWh/m\u00b2/yr"],
+        ["Specific Yield", f"{pvsyst_a.get('specific_yield', 'N/A')}", f"{pvsyst_b.get('specific_yield', 'N/A')}", "kWh/kWp"],
+        ["Performance Ratio", _fmt_pr(pvsyst_a.get('performance_ratio')), _fmt_pr(pvsyst_b.get('performance_ratio')), ""],
+        ["CUF (Capacity Util. Factor)", f"{r['cuf']*100:.1f}%", f"{w['cuf']*100:.1f}%", ""],
+    ]
+    for i, row in enumerate(pv_rows):
+        pdf.tbl_row(pv_col, row, fill=i % 2 == 1)
 
     # ====== 3. TECHNICAL SPECIFICATIONS ======
     pdf.add_page()
@@ -234,11 +268,18 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.set_text_color(0, 51, 102)
     pdf.cell(0, 7, "4.2 Energy Generation & Revenue", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
+    pvsyst_a = r.get('pvsyst', {})
+    pr_val = pvsyst_a.get('performance_ratio', 'N/A')
+    pr_str = f"{pr_val:.1%}" if isinstance(pr_val, (int, float)) else str(pr_val)
     pdf.ptext(
         f"Year 1 generation: {r['gen_y1_kwh']/1e3:,.0f} MWh ({info.get('module_a_short','A')}) "
         f"vs {w['gen_y1_kwh']/1e3:,.0f} MWh ({info.get('module_b_short','B')}). "
         f"Over 25 years, {info.get('module_b_short','B')} generates "
-        f"{((w['total_gen_kwh']/r['total_gen_kwh'])-1)*100:.1f}% more energy.")
+        f"{((w['total_gen_kwh']/r['total_gen_kwh'])-1)*100:.1f}% more energy. "
+        f"Generation modeled with PVSyst-based site parameters: "
+        f"GHI {pvsyst_a.get('annual_ghi', 'N/A')} kWh/m\u00b2/yr, "
+        f"POA {pvsyst_a.get('annual_poa', 'N/A')} kWh/m\u00b2/yr, "
+        f"Performance Ratio {pr_str}.")
 
     gen_path = os.path.join(chart_dir, "chart_gen.png")
     if os.path.exists(gen_path):

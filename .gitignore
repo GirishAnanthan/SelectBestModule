@@ -8,6 +8,8 @@ __pycache__/
 # Generated charts & reports
 chart_*.png
 fin_results.json
+*_Report_*.pdf
+Comparison_Report_*.pdf
 
 # Sample datasheets (copyrighted by manufacturers)
 Redren*.pdf

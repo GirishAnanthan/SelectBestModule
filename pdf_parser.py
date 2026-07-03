@@ -246,6 +246,8 @@ def parse_specs(text, technology_hint=None):
     for pat, key in tc_patterns:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
+            if key is None:
+                continue
             val = float(m.group(1))
             if 0.1 <= val <= 0.5:
                 specs["temp_coeff_pmax"] = -val

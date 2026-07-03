@@ -83,6 +83,21 @@ with st.sidebar:
     loan_tenure = st.slider("Loan Tenure (years)", 5, 20, 15)
     discount_rate = st.number_input("Discount Rate / WACC (%)", 5.0, 20.0, 10.0, 0.5) / 100
     bos_cost = st.number_input("BoS, EPC & Land (Rs./Wp)", 5.0, 30.0, 12.0, 0.5)
+    st.markdown("---")
+    st.header("\U0001f3d7\ufe0f Mounting Structure")
+    mounting_type = st.radio(
+        "Select Mounting Type",
+        ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"],
+        index=0,
+        help="Fixed Tilt: modules at a fixed angle; Single Axis: tracks sun East-West; Dual Axis: full two-axis tracking"
+    )
+    tilt_angle = None
+    if mounting_type == "Fixed Tilt":
+        tilt_angle = st.number_input(
+            "Tilt Angle (degrees from horizontal)",
+            0, 60, 10, 1,
+            help="Optimal tilt for this latitude is approximately 9\u00b0"
+        )
     st.info("Module prices are entered below per-module after datasheet upload.")
 
 # ===== MAIN: Module Upload & Parse =====
@@ -159,7 +174,7 @@ uploaded_b = st.session_state.get("upload_Module 2")
 # ===== GENERATE REPORT =====
 st.markdown("---")
 if specs_a and specs_b:
-    if st.button("\u2699\ufe0f GENERATE INVESTMENT GRADE REPORT", type="primary", use_container_width=True):
+    if st.button("\u2699\ufe0f GENERATE INVESTMENT GRADE REPORT", type="primary", width='stretch'):
         with st.spinner("Running comprehensive analysis..."):
             project_params = {
                 "capacity_mw": plant_capacity, "latitude": latitude,
@@ -168,6 +183,7 @@ if specs_a and specs_b:
                 "loan_tenure": loan_tenure, "tax_rate": 0.2517,
                 "discount_rate": discount_rate, "om_per_mw": 180000,
                 "om_esc": 0.03, "bos_per_w": bos_cost, "insurance_rate": 0.003,
+                "mounting_type": mounting_type, "tilt_angle": tilt_angle,
             }
 
             # Build module specs for financial engine
@@ -227,6 +243,7 @@ if specs_a and specs_b:
                     "plant_capacity": f"{plant_capacity:.1f}",
                     "location": location, "latitude": str(latitude),
                     "longitude": str(longitude), "date": datetime.now().strftime("%B %Y"),
+                    "mounting_type": mounting_type, "tilt_angle": tilt_angle,
                     "module_a_name": f"Module 1 ({safe_val(specs_a, 'power_wp')}Wp)",
                     "module_b_name": f"Module 2 ({safe_val(specs_b, 'power_wp')}Wp)",
                     "module_a_short": "Module A", "module_b_short": "Module B",
@@ -234,7 +251,7 @@ if specs_a and specs_b:
                     "project_params": [
                         f"Location: {location} ({latitude}, {longitude})",
                         f"Plant Capacity: {plant_capacity:.1f} MW DC",
-                        "Configuration: Fixed-tilt ground mount",
+                        f"Configuration: {mounting_type}{' (Tilt: '+str(tilt_angle)+')' if tilt_angle else ''} ground mount",
                         f"PPA Tariff: Rs. {ppa_tariff:.2f}/kWh",
                         "Plant Life: 25 years",
                         f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
@@ -276,7 +293,7 @@ if specs_a and specs_b:
                         if os.path.exists(chart_paths[cn]):
                             st.image(chart_paths[cn],
                                      caption=cn.replace('.png','').replace('_',' ').title(),
-                                     use_container_width=True)
+                                     width='stretch')
 
                 # Build dynamic report filename from manufacturer names
                 def get_mfr_name(specs, uploaded_widget):
@@ -298,7 +315,7 @@ if specs_a and specs_b:
                     data=report_data,
                     file_name=report_filename,
                     mime="application/pdf",
-                    use_container_width=True,
+                    width='stretch',
                     type="primary",
                 )
                 st.info("The report includes: Executive Summary, Project Background, "
