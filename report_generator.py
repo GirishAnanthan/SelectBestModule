@@ -97,7 +97,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     info = project_info
 
     pdf = SolarReport()
-    pdf.header_text = f"{info.get('project_name', 'Solar Plant')} | Investor Grade Report"
+    pdf.header_text = f"{info.get('project_name', 'Solar Plant')} | Techno Commercial Comparison"
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
 
@@ -106,7 +106,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(40)
     pdf.set_font("Helvetica", "B", 28)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 15, "INVESTMENT GRADE REPORT", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 15, "TECHNO COMMERCIAL COMPARISON", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
     pdf.set_font("Helvetica", "", 18)
     pdf.set_text_color(60, 60, 60)
@@ -118,7 +118,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(10)
     pdf.set_font("Helvetica", "", 13)
     pdf.set_text_color(80, 80, 80)
-    pdf.cell(0, 8, "Module Selection Analysis", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, "Techno Commercial Comparison & Module Selection Analysis", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 8, f"{info.get('module_a_name', 'Module A')} vs {info.get('module_b_name', 'Module B')}", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(12)
     pdf.set_font("Helvetica", "", 11)
@@ -145,7 +145,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         f"{info.get('module_a_name', 'Module A')} against "
         f"{info.get('module_b_name', 'Module B')} using {mounting_display} mounting configuration, "
         f"on a frontside-only generation basis, excluding bifacial gains to ensure conservative projections. "
-        f"Generation estimates incorporate PVSyst-style simulation parameters including site-specific "
+        f"Generation estimates incorporate site-specific simulation parameters including "
         f"GHI, POA irradiance, and Performance Ratio.")
 
     pdf.set_font("Helvetica", "B", 12)
@@ -204,27 +204,30 @@ def generate_report(r, w, project_info, chart_dir, output_path):
 
     pvsyst_a = r.get('pvsyst', {})
     pvsyst_b = w.get('pvsyst', {})
-    pdf.stitle("2.1 PVSyst Simulation Data")
-    pdf.ptext(
-        "Generation estimates in this report are benchmarked against PVSyst simulation methodology. "
-        "The following site-specific irradiance and performance metrics are used to ensure bankable "
-        "and credible generation projections.")
-    pdf.ln(1)
-    pv_col = [52, 55, 55, 28]
-    pdf.tbl_hdr(pv_col, ["PVSyst Parameter", info.get('module_a_short','A'), info.get('module_b_short','B'), "Unit"])
-    def _fmt_pr(v):
-        if isinstance(v, (int, float)):
-            return f"{v:.1%}"
-        return str(v)
-    pv_rows = [
-        ["Annual GHI", f"{pvsyst_a.get('annual_ghi', 'N/A')}", f"{pvsyst_b.get('annual_ghi', 'N/A')}", "kWh/m\u00b2/yr"],
-        ["Annual POA Irradiance", f"{pvsyst_a.get('annual_poa', 'N/A')}", f"{pvsyst_b.get('annual_poa', 'N/A')}", "kWh/m\u00b2/yr"],
-        ["Specific Yield", f"{pvsyst_a.get('specific_yield', 'N/A')}", f"{pvsyst_b.get('specific_yield', 'N/A')}", "kWh/kWp"],
-        ["Performance Ratio", _fmt_pr(pvsyst_a.get('performance_ratio')), _fmt_pr(pvsyst_b.get('performance_ratio')), ""],
-        ["CUF (Capacity Util. Factor)", f"{r['cuf']*100:.1f}%", f"{w['cuf']*100:.1f}%", ""],
-    ]
-    for i, row in enumerate(pv_rows):
-        pdf.tbl_row(pv_col, row, fill=i % 2 == 1)
+    if not pvsyst_a and not pvsyst_b:
+        pdf.ptext("Note: Simulation data not available for this configuration.")
+    else:
+        pdf.stitle("2.1 Energy Simulation Data")
+        pdf.ptext(
+            "The following site-specific irradiance and performance metrics are computed from the project location "
+            "and mounting configuration. These parameters form the basis of the energy generation projections "
+            "presented in this report.")
+        pdf.ln(1)
+        pv_col = [52, 55, 55, 28]
+        pdf.tbl_hdr(pv_col, ["Simulation Parameter", info.get('module_a_short','A'), info.get('module_b_short','B'), "Unit"])
+        def _fmt_pr(v):
+            if isinstance(v, (int, float)):
+                return f"{v:.1%}"
+            return str(v)
+        pv_rows = [
+            ["Annual GHI", f"{pvsyst_a.get('annual_ghi', 'N/A')}", f"{pvsyst_b.get('annual_ghi', 'N/A')}", "kWh/m\u00b2/yr"],
+            ["Annual POA Irradiance", f"{pvsyst_a.get('annual_poa', 'N/A')}", f"{pvsyst_b.get('annual_poa', 'N/A')}", "kWh/m\u00b2/yr"],
+            ["Specific Yield", f"{pvsyst_a.get('specific_yield', 'N/A')}", f"{pvsyst_b.get('specific_yield', 'N/A')}", "kWh/kWp"],
+            ["Performance Ratio", _fmt_pr(pvsyst_a.get('performance_ratio')), _fmt_pr(pvsyst_b.get('performance_ratio')), ""],
+            ["CUF (Capacity Util. Factor)", f"{r['cuf']*100:.1f}%", f"{w['cuf']*100:.1f}%", ""],
+        ]
+        for i, row in enumerate(pv_rows):
+            pdf.tbl_row(pv_col, row, fill=i % 2 == 1)
 
     # ====== 3. TECHNICAL SPECIFICATIONS ======
     pdf.add_page()
@@ -276,7 +279,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         f"vs {w['gen_y1_kwh']/1e3:,.0f} MWh ({info.get('module_b_short','B')}). "
         f"Over 25 years, {info.get('module_b_short','B')} generates "
         f"{((w['total_gen_kwh']/r['total_gen_kwh'])-1)*100:.1f}% more energy. "
-        f"Generation modeled with PVSyst-based site parameters: "
+        f"Generation modeled with site-specific irradiance data: "
         f"GHI {pvsyst_a.get('annual_ghi', 'N/A')} kWh/m\u00b2/yr, "
         f"POA {pvsyst_a.get('annual_poa', 'N/A')} kWh/m\u00b2/yr, "
         f"Performance Ratio {pr_str}.")

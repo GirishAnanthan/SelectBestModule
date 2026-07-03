@@ -171,10 +171,22 @@ specs_b = handle_module(col2, "Module 2", "N-TOPCon")
 uploaded_a = st.session_state.get("upload_Module 1")
 uploaded_b = st.session_state.get("upload_Module 2")
 
+def _get_mfr_name(specs, uploaded_widget, fallback="Module"):
+    """Extract manufacturer display name from specs or filename."""
+    if specs:
+        mfr = specs.get("manufacturer", "")
+        if mfr:
+            return mfr
+    if uploaded_widget and hasattr(uploaded_widget, 'name'):
+        mfr = os.path.splitext(uploaded_widget.name)[0]
+        if mfr:
+            return mfr
+    return fallback
+
 # ===== GENERATE REPORT =====
 st.markdown("---")
 if specs_a and specs_b:
-    if st.button("\u2699\ufe0f GENERATE INVESTMENT GRADE REPORT", type="primary", width='stretch'):
+    if st.button("\u2699\ufe0f GENERATE TECHNO COMMERCIAL COMPARISON", type="primary", width='stretch'):
         with st.spinner("Running comprehensive analysis..."):
             project_params = {
                 "capacity_mw": plant_capacity, "latitude": latitude,
@@ -320,6 +332,6 @@ if specs_a and specs_b:
                 )
                 st.info("The report includes: Executive Summary, Project Background, "
                         "Module Specifications, CAPEX, Energy Projections, Cash Flow, "
-                        "Financial Metrics (IRR/NPV/LCOE), Risk Analysis, and Bankability Statement.")
+                        "Financial Metrics (IRR/NPV/LCOE), PVSyst Simulation Data, Risk Analysis, and Recommendation.")
 else:
     st.info("Upload datasheets for both modules in the columns above to proceed.")
