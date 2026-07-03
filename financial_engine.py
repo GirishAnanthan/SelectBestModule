@@ -105,7 +105,15 @@ def run_analysis(module_a_specs, module_b_specs, project_params, chart_dir):
         actual_kw = actual_mw * 1000
 
         module_cost = mod['price_per_wp'] * n_modules * cap_w
-        bos_cost = project_params['bos_per_w'] * n_modules * cap_w
+
+        # BoS cost adjusts with module count:
+        # ~50% scales with module count (MMS, cables, connectors, DCDBs, land, labor)
+        # ~50% is fixed per Wp (inverters, transformers, switchgear, SCADA)
+        ref_modules = int(np.ceil(project_mw * 1e6 / 600))
+        fixed_bos_frac = 0.50
+        var_bos_frac = 0.50
+        bos_adj = fixed_bos_frac + var_bos_frac * (n_modules / ref_modules)
+        bos_cost = project_params['bos_per_w'] * n_modules * cap_w * bos_adj
         total_cost = module_cost + bos_cost
         debt = total_cost * project_params['debt_ratio']
         equity = total_cost * (1 - project_params['debt_ratio'])

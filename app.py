@@ -258,6 +258,7 @@ if specs_a and specs_b:
                 spec_rows = [
                     ["Model", safe_val(specs_a, "power_wp") + "Wp", safe_val(specs_b, "power_wp") + "Wp", ""],
                     ["Technology", safe_val(specs_a, "technology"), safe_val(specs_b, "technology"), ""],
+                    ["Modules Required", f'{r["module_count"]:,}', f'{w["module_count"]:,}', ""],
                     ["Efficiency", f'{specs_a.get("efficiency_pct", 0):.2f}%', f'{specs_b.get("efficiency_pct", 0):.2f}%', ""],
                     ["Vmp", f'{specs_a.get("vmp", 0):.2f}V', f'{specs_b.get("vmp", 0):.2f}V', ""],
                     ["Imp", f'{specs_a.get("imp", 0):.2f}A', f'{specs_b.get("imp", 0):.2f}A', ""],
@@ -289,7 +290,9 @@ if specs_a and specs_b:
                         "Plant Life: 25 years",
                         f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
                         f"Interest Rate: {interest_rate*100:.0f}% p.a., {loan_tenure}-year tenure",
-                        f"BoS & EPC: Rs. {bos_cost:.1f}/Wp",
+                        f"BoS & EPC: Rs. {bos_cost:.1f}/Wp (adjusted for module count)",
+                        f"Module A: {r['module_count']:,} units @ {specs_a['power_wp']}Wp",
+                        f"Module B: {w['module_count']:,} units @ {specs_b['power_wp']}Wp",
                         "Analysis: Frontside-only generation (no bifacial gains)",
                     ],
                 }
