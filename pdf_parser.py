@@ -87,43 +87,33 @@ def parse_specs(text, technology_hint=None):
                 all_powers.add(val)
 
     # Strategy C: Find power values in model names (e.g. "G12R-600", "G12R 600W")
-    for m in re.finditer(r'[A-Za-z0-9]+[-\s](\d{3})(?:[Ww](?:p)?)?(?:\s|,|$|\))', text):
+    for m in re.finditer(r'[A-Za-z]+[A-Za-z0-9]*[-\s](\d{3})(?:[Ww](?:p)?)?(?:\s|,|$|\))', text):
         val = int(m.group(1))
         if 300 <= val <= 800:
             all_powers.add(val)
-
-    # Strategy D: Any line with 2+ integers 300-800 (bare space-separated power rows)
-    for line in lines:
-        ints = [int(n) for n in re.findall(r'\b(\d+)\b', line) if 300 <= int(n) <= 700]
-        if len(set(ints)) >= 2:
-            for v in ints:
-                all_powers.add(v)
 
     # Remove clearly non-power values (no mass-market module exceeds 750Wp)
     all_powers = {v for v in all_powers if v <= 750}
 
     if all_powers:
         sorted_powers = sorted(all_powers)
-        # Cluster values where consecutive numbers are within 15W of each other
-        clusters = []
-        current = [sorted_powers[0]]
-        for i in range(1, len(sorted_powers)):
-            if sorted_powers[i] - sorted_powers[i-1] <= 15:
-                current.append(sorted_powers[i])
+        # Use gap-based clustering: if gap > 50W between values, keep only the upper cluster
+        # This separates STC values from NOCT values
+        if len(sorted_powers) > 1:
+            max_gap_idx = 0
+            max_gap = 0
+            for i in range(len(sorted_powers) - 1):
+                gap = sorted_powers[i+1] - sorted_powers[i]
+                if gap > max_gap:
+                    max_gap = gap
+                    max_gap_idx = i
+            if max_gap > 50:
+                specs["power_options"] = sorted_powers[max_gap_idx+1:]
             else:
-                if len(current) >= 2:
-                    clusters.append(current)
-                current = [sorted_powers[i]]
-        if len(current) >= 2:
-            clusters.append(current)
-        # Pick the cluster with the highest average (this is the STC power group)
-        if clusters:
-            best = max(clusters, key=lambda c: sum(c) / len(c))
-            specs["power_options"] = best
-            specs["power_wp"] = max(best)
+                specs["power_options"] = sorted_powers
         else:
             specs["power_options"] = sorted_powers
-            specs["power_wp"] = max(sorted_powers)
+        specs["power_wp"] = max(specs["power_options"])
     else:
         specs["power_options"] = []
         specs["power_wp"] = None

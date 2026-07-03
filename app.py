@@ -158,9 +158,30 @@ def handle_module(col, label, default_tech):
         with st.expander(f"\U0001f50d {label} - Extracted Specifications", expanded=False):
             st.text(format_specs_for_display(specs))
 
-        display = {k: v for k, v in specs.items()
-                   if not k.startswith('_') and v is not None and v != []}
-        st.json(display)
+        st.caption("Edit any incorrectly extracted values below:")
+        vmp = st.number_input("Vmp (V)", 0.0, 100.0, float(specs.get("vmp", 0) or 0), key=f"vmp_{label}")
+        imp = st.number_input("Imp (A)", 0.0, 30.0, float(specs.get("imp", 0) or 0), key=f"imp_{label}")
+        voc = st.number_input("Voc (V)", 0.0, 100.0, float(specs.get("voc", 0) or 0), key=f"voc_{label}")
+        isc = st.number_input("Isc (A)", 0.0, 30.0, float(specs.get("isc", 0) or 0), key=f"isc_{label}")
+        eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(specs.get("efficiency_pct", 0) or 0), key=f"eff_{label}")
+        tc = st.number_input("Temp Coeff Pmax (%/°C)", 0.0, 1.0, float(abs(specs.get("temp_coeff_pmax", 0) or 0)), key=f"tc_{label}")
+        deg_y1 = st.number_input("Y1 Degradation (%)", 0.0, 5.0, float(specs.get("deg_y1_pct", 0) or 0), key=f"deg_y1_{label}")
+        deg_ann = st.number_input("Annual Degradation (%)", 0.0, 1.0, float(specs.get("deg_annual_pct", 0) or 0), key=f"deg_ann_{label}")
+        pw = st.number_input("Power Warranty (years)", 0, 40, int(specs.get("warranty_power", 0) or 0), key=f"pw_{label}")
+        noct = st.number_input("NOCT (°C)", 0, 60, int(specs.get("noct", 0) or 0), key=f"noct_{label}")
+        specs.update(
+            vmp=vmp if vmp else specs.get("vmp"),
+            imp=imp if imp else specs.get("imp"),
+            voc=voc if voc else specs.get("voc"),
+            isc=isc if isc else specs.get("isc"),
+            efficiency_pct=eff if eff else specs.get("efficiency_pct"),
+            temp_coeff_pmax=-tc if tc else specs.get("temp_coeff_pmax"),
+            deg_y1_pct=deg_y1 if deg_y1 else specs.get("deg_y1_pct"),
+            deg_annual_pct=deg_ann if deg_ann else specs.get("deg_annual_pct"),
+            warranty_power=pw if pw else specs.get("warranty_power"),
+            noct=noct if noct else specs.get("noct"),
+        )
+
         return specs
     return None
 
