@@ -87,35 +87,46 @@ def parse_specs(text, technology_hint=None):
                 all_powers.add(val)
 
     # Strategy C: Find power values in model names (e.g. "G12R-600", "G12R 600W")
-    for m in re.finditer(r'[A-Za-z]+[A-Za-z0-9]*[-\s](\d{3})(?:[Ww](?:p)?)?(?:\s|,|$|\))', text):
+    # Require prefix to be at least 3 chars starting with a letter (excludes "m2 800")
+    model_powers = set()
+    for m in re.finditer(r'[A-Za-z][A-Za-z0-9]{2,}[-\s](\d{3})(?:[Ww](?:p)?)?(?:\s|,|$|\))', text):
         val = int(m.group(1))
         if 300 <= val <= 800:
+            model_powers.add(val)
             all_powers.add(val)
 
     # Remove clearly non-power values (no mass-market module exceeds 750Wp)
     all_powers = {v for v in all_powers if v <= 750}
 
-    if all_powers:
-        sorted_powers = sorted(all_powers)
-        # Use gap-based clustering: if gap > 50W between values, keep only the upper cluster
-        # This separates STC values from NOCT values
-        if len(sorted_powers) > 1:
-            max_gap_idx = 0
-            max_gap = 0
-            for i in range(len(sorted_powers) - 1):
-                gap = sorted_powers[i+1] - sorted_powers[i]
-                if gap > max_gap:
-                    max_gap = gap
-                    max_gap_idx = i
-            if max_gap > 50:
-                specs["power_options"] = sorted_powers[max_gap_idx+1:]
-            else:
-                specs["power_options"] = sorted_powers
-        else:
-            specs["power_options"] = sorted_powers
-        specs["power_wp"] = max(specs["power_options"])
+    def pick_power_cluster(powers):
+        """Run gap-based (>50W) clustering to separate STC from NOCT values."""
+        if not powers:
+            return []
+        sp = sorted(powers)
+        if len(sp) <= 1:
+            return sp
+        max_gap_idx = 0
+        max_gap = 0
+        for i in range(len(sp) - 1):
+            gap = sp[i+1] - sp[i]
+            if gap > max_gap:
+                max_gap = gap
+                max_gap_idx = i
+        if max_gap > 50:
+            return sp[max_gap_idx+1:]
+        return sp
+
+    # Strategy C (model names) is most reliable: use its results as primary source
+    if model_powers:
+        specs["power_options"] = pick_power_cluster(model_powers)
+    elif all_powers:
+        specs["power_options"] = pick_power_cluster(all_powers)
     else:
         specs["power_options"] = []
+
+    if specs["power_options"]:
+        specs["power_wp"] = max(specs["power_options"])
+    else:
         specs["power_wp"] = None
 
     # --- Per-power data extraction ---
