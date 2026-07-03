@@ -92,6 +92,13 @@ def parse_specs(text, technology_hint=None):
         if 300 <= val <= 800:
             all_powers.add(val)
 
+    # Strategy D: Any line with 2+ integers 300-800 (bare space-separated power rows)
+    for line in lines:
+        ints = [int(n) for n in re.findall(r'\b(\d+)\b', line) if 300 <= int(n) <= 800]
+        if len(set(ints)) >= 2:
+            for v in ints:
+                all_powers.add(v)
+
     if all_powers:
         sorted_powers = sorted(all_powers)
         if len(sorted_powers) > 1:

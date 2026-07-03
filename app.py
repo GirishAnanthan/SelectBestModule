@@ -19,7 +19,7 @@ st.markdown("Upload datasheets for two solar modules. The system automatically e
 
 # ----- CACHED HELPERS -----
 @st.cache_data(show_spinner=False)
-def cached_parse(pdf_bytes, default_tech):
+def cached_parse(pdf_bytes, default_tech, _version=2):
     return extract_module_specs(pdf_bytes, default_tech)
 
 @st.cache_data(show_spinner=False)
