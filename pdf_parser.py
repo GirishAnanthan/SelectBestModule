@@ -94,28 +94,36 @@ def parse_specs(text, technology_hint=None):
 
     # Strategy D: Any line with 2+ integers 300-800 (bare space-separated power rows)
     for line in lines:
-        ints = [int(n) for n in re.findall(r'\b(\d+)\b', line) if 300 <= int(n) <= 800]
+        ints = [int(n) for n in re.findall(r'\b(\d+)\b', line) if 300 <= int(n) <= 700]
         if len(set(ints)) >= 2:
             for v in ints:
                 all_powers.add(v)
 
+    # Remove clearly non-power values (no mass-market module exceeds 750Wp)
+    all_powers = {v for v in all_powers if v <= 750}
+
     if all_powers:
         sorted_powers = sorted(all_powers)
-        if len(sorted_powers) > 1:
-            max_gap_idx = 0
-            max_gap = 0
-            for i in range(len(sorted_powers) - 1):
-                gap = sorted_powers[i+1] - sorted_powers[i]
-                if gap > max_gap:
-                    max_gap = gap
-                    max_gap_idx = i
-            if max_gap > 50:
-                specs["power_options"] = sorted_powers[max_gap_idx+1:]
+        # Cluster values where consecutive numbers are within 15W of each other
+        clusters = []
+        current = [sorted_powers[0]]
+        for i in range(1, len(sorted_powers)):
+            if sorted_powers[i] - sorted_powers[i-1] <= 15:
+                current.append(sorted_powers[i])
             else:
-                specs["power_options"] = sorted_powers
+                if len(current) >= 2:
+                    clusters.append(current)
+                current = [sorted_powers[i]]
+        if len(current) >= 2:
+            clusters.append(current)
+        # Pick the cluster with the highest average (this is the STC power group)
+        if clusters:
+            best = max(clusters, key=lambda c: sum(c) / len(c))
+            specs["power_options"] = best
+            specs["power_wp"] = max(best)
         else:
             specs["power_options"] = sorted_powers
-        specs["power_wp"] = max(specs["power_options"])
+            specs["power_wp"] = max(sorted_powers)
     else:
         specs["power_options"] = []
         specs["power_wp"] = None
@@ -199,6 +207,50 @@ def parse_specs(text, technology_hint=None):
                         specs["vmp"], specs["imp"], specs["isc"], specs["voc"], eff = result
                         if eff: specs["efficiency_pct"] = eff
                         found_row = True
+                        break
+
+        # Strategy 3: Columnar format (power values as columns, params as rows)
+        # e.g. "Vmp (V)  45.70  45.90  46.10  46.30  46.50  46.70"
+        if not found_row and specs.get("power_options"):
+            power_opts = specs["power_options"]
+            # Find the power row with the selected power to determine column index
+            power_row = None
+            col_idx = None
+            for line in lines:
+                if power_str not in line:
+                    continue
+                nums = extract_nums_from_line(line)
+                pow_vals = [n for n in nums if 300 <= n <= 800]
+                if len(pow_vals) >= 3:
+                    for j, v in enumerate(pow_vals):
+                        if int(v) == int(power):
+                            col_idx = j
+                            power_row = nums
+                            break
+                    if col_idx is not None:
+                        break
+            if col_idx is not None:
+                param_labels = {
+                    "vmp": r'\bVmp\b|\(V\)\s|Voltage.*Pmax',
+                    "imp": r'\bImp\b|\(A\)\s|Current.*Pmax',
+                    "isc": r'\bIsc\b|Short.*Circuit',
+                    "voc": r'\bVoc\b|Open.*Circuit',
+                }
+                for key, label_pat in param_labels.items():
+                    for line in lines:
+                        if re.search(label_pat, line, re.IGNORECASE):
+                            nums = extract_nums_from_line(line)
+                            dec_vals = [n for n in nums if 8 <= n <= 60]
+                            if col_idx < len(dec_vals):
+                                specs[key] = dec_vals[col_idx]
+                            break
+                # Efficiency from columnar format
+                for line in lines:
+                    if re.search(r'Eff|\bη\b', line, re.IGNORECASE):
+                        nums = extract_nums_from_line(line)
+                        eff_vals = [n for n in nums if 18 <= n <= 26]
+                        if col_idx < len(eff_vals):
+                            specs["efficiency_pct"] = eff_vals[col_idx]
                         break
 
     # --- Separate efficiency extraction ---
