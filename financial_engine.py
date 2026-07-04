@@ -303,7 +303,7 @@ def _make_ts_chart(data_r, data_w, title, ylabel, fn,
                    c1=(41,128,185), c2=(231,76,60)):
     """Generate a time series comparison chart."""
     from PIL import Image, ImageDraw, ImageFont
-    W,H = 1000, 600
+    W,H = 1000, 400
     img = Image.new('RGB', (W,H), (255,255,255))
     d = ImageDraw.Draw(img)
     try: tf=ImageFont.truetype("arial.ttf", 22); lf=ImageFont.truetype("arial.ttf", 16); af=ImageFont.truetype("arial.ttf", 13)
@@ -358,7 +358,7 @@ def _make_ts_bar_chart(data_r, data_w, title, ylabel, fn,
                        c1=(41,128,185), c2=(231,76,60)):
     """Grouped bar chart for two time series (e.g. net income)."""
     from PIL import Image, ImageDraw, ImageFont
-    W, H = 1000, 600
+    W, H = 1000, 400
     img = Image.new('RGB', (W, H), (255, 255, 255))
     d = ImageDraw.Draw(img)
     try:
