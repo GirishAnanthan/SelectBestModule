@@ -244,6 +244,8 @@ def run_analysis(module_a_specs, module_b_specs, project_params, chart_dir):
 def generate_charts(results, project_params, chart_dir):
     """Generate comparison charts. Returns dict of chart paths."""
     r, w = results["A"], results["B"]
+    name_a = project_params.get("module_a_short", "Module A")
+    name_b = project_params.get("module_b_short", "Module B")
 
     # Compute data series
     cum_r = [sum(r['fcf'][:i+1]) for i in range(len(r['fcf']))]
@@ -265,22 +267,22 @@ def generate_charts(results, project_params, chart_dir):
     # 1. Cumulative FCF
     charts['chart_cumulative_fcf.png'] = _make_ts_chart(
         cum_r, cum_w, "Cumulative Free Cash Flow to Equity (Rs. Crores)",
-        "Cumulative FCF (Rs. Cr)", os.path.join(chart_dir, "chart_cumulative_fcf.png"))
+        "Cumulative FCF (Rs. Cr)", os.path.join(chart_dir, "chart_cumulative_fcf.png"), name_a=name_a, name_b=name_b)
 
     # 2. Generation
     charts['chart_gen.png'] = _make_ts_chart(
         gen_r, gen_w, "Annual Energy Generation (MWh) - 25 Year Horizon",
-        "Generation (MWh/yr)", os.path.join(chart_dir, "chart_gen.png"))
+        "Generation (MWh/yr)", os.path.join(chart_dir, "chart_gen.png"), name_a=name_a, name_b=name_b)
 
     # 3. Net Income (bar chart)
     charts['chart_net_income.png'] = _make_ts_bar_chart(
         ni_r[1:], ni_w[1:], "Annual Net Income After Tax (Rs. Crores)",
-        "Net Income (Rs. Cr)", os.path.join(chart_dir, "chart_net_income.png"))
+        "Net Income (Rs. Cr)", os.path.join(chart_dir, "chart_net_income.png"), name_a=name_a, name_b=name_b)
 
     # 4. DSCR
     charts['chart_dscr.png'] = _make_ts_chart(
         dscr_r, dscr_w, "Debt Service Coverage Ratio (Debt Tenure Period)",
-        "DSCR (x)", os.path.join(chart_dir, "chart_dscr.png"))
+        "DSCR (x)", os.path.join(chart_dir, "chart_dscr.png"), name_a=name_a, name_b=name_b)
 
     # 5. Cost pie (Module A as representative)
     charts['chart_cost_pie.png'] = _make_pie_chart(
@@ -294,13 +296,13 @@ def generate_charts(results, project_params, chart_dir):
         [r['irr']*100, r['npv']/1e7],
         [w['irr']*100, w['npv']/1e7],
         ["Equity IRR (%)", "NPV @ 10% (Rs.Cr)"],
-        "Financial Metric Comparison", os.path.join(chart_dir, "chart_irr_npv.png"))
+        "Financial Metric Comparison", os.path.join(chart_dir, "chart_irr_npv.png"), name_a=name_a, name_b=name_b)
 
     return charts
 
 
 def _make_ts_chart(data_r, data_w, title, ylabel, fn,
-                   c1=(41,128,185), c2=(231,76,60)):
+                   c1=(41,128,185), c2=(231,76,60), name_a="Module A", name_b="Module B"):
     """Generate a time series comparison chart."""
     from PIL import Image, ImageDraw, ImageFont
     W,H = 1000, 350
@@ -348,14 +350,14 @@ def _make_ts_chart(data_r, data_w, title, ylabel, fn,
             d.ellipse([pt[0]-4,pt[1]-4,pt[0]+4,pt[1]+4], fill=c)
 
     d.rectangle([(ML, H-30),(ML+14, H-15)], fill=c1)
-    d.text((ML+20, H-33), "Module A", fill=(0,0,0), font=lf)
+    d.text((ML+20, H-33), name_a, fill=(0,0,0), font=lf)
     d.rectangle([(ML+120, H-30),(ML+134, H-15)], fill=c2)
-    d.text((ML+140, H-33), "Module B", fill=(0,0,0), font=lf)
+    d.text((ML+140, H-33), name_b, fill=(0,0,0), font=lf)
     img.save(fn); return fn
 
 
 def _make_ts_bar_chart(data_r, data_w, title, ylabel, fn,
-                       c1=(41,128,185), c2=(231,76,60)):
+                       c1=(41,128,185), c2=(231,76,60), name_a="Module A", name_b="Module B"):
     """Grouped bar chart for two time series (e.g. net income)."""
     from PIL import Image, ImageDraw, ImageFont
     W, H = 1000, 350
@@ -415,14 +417,14 @@ def _make_ts_bar_chart(data_r, data_w, title, ylabel, fn,
     d.text((5, MT + PH // 2 - 40), ylabel, fill=(0, 0, 0), font=lf)
 
     d.rectangle([(ML, H - 30), (ML + 14, H - 15)], fill=c1)
-    d.text((ML + 20, H - 33), "Module A", fill=(0, 0, 0), font=lf)
+    d.text((ML + 20, H - 33), name_a, fill=(0, 0, 0), font=lf)
     d.rectangle([(ML + 120, H - 30), (ML + 134, H - 15)], fill=c2)
-    d.text((ML + 140, H - 33), "Module B", fill=(0, 0, 0), font=lf)
+    d.text((ML + 140, H - 33), name_b, fill=(0, 0, 0), font=lf)
     img.save(fn)
     return fn
 
 
-def _make_bar_chart(data_r, data_w, labels, title, fn):
+def _make_bar_chart(data_r, data_w, labels, title, fn, name_a="Module A", name_b="Module B"):
     from PIL import Image, ImageDraw, ImageFont
     W,H = 800, 600
     img = Image.new('RGB', (W,H), (255,255,255))
@@ -446,9 +448,9 @@ def _make_bar_chart(data_r, data_w, labels, title, fn):
         d.rectangle([(xc+bw+gap,H-MB-hw),(xc+2*bw+gap,H-MB)], fill=(231,76,60))
         d.text((xc-15,H-MB+8), labels[i], fill=(0,0,0), font=af)
     d.rectangle([(ML, H-30),(ML+14, H-15)], fill=(41,128,185))
-    d.text((ML+20, H-33),"Module A", fill=(0,0,0), font=lf)
+    d.text((ML+20, H-33), name_a, fill=(0,0,0), font=lf)
     d.rectangle([(ML+120, H-30),(ML+134, H-15)], fill=(231,76,60))
-    d.text((ML+140, H-33),"Module B", fill=(0,0,0), font=lf)
+    d.text((ML+140, H-33), name_b, fill=(0,0,0), font=lf)
     img.save(fn); return fn
 
 

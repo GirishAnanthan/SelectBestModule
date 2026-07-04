@@ -245,9 +245,9 @@ if specs_a and specs_b:
                     "location": location, "latitude": str(latitude),
                     "longitude": str(longitude), "date": datetime.now().strftime("%B %Y"),
                     "mounting_type": mounting_type, "tilt_angle": tilt_angle,
-                    "module_a_name": f"Module 1 ({safe_val(specs_a, 'power_wp')}Wp)",
-                    "module_b_name": f"Module 2 ({safe_val(specs_b, 'power_wp')}Wp)",
-                    "module_a_short": "Module A", "module_b_short": "Module B",
+                    "module_a_name": f"{mfr_a} ({safe_val(specs_a, 'power_wp')}Wp)",
+                    "module_b_name": f"{mfr_b} ({safe_val(specs_b, 'power_wp')}Wp)",
+                    "module_a_short": mfr_a, "module_b_short": mfr_b,
                     "spec_rows": spec_rows,
                     # Extended fields for Project Details section
                     "module_a_brand": mfr_a,
@@ -273,8 +273,8 @@ if specs_a and specs_b:
                         f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
                         f"Interest Rate: {interest_rate*100:.0f}% p.a., {loan_tenure}-year tenure",
                         f"BoS & EPC: Rs. {bos_cost:.1f}/Wp (adjusted for module count)",
-                        f"Module A: {r['module_count']:,} units @ {specs_a['power_wp']}Wp",
-                        f"Module B: {w['module_count']:,} units @ {specs_b['power_wp']}Wp",
+                        f"{mfr_a}: {r['module_count']:,} units @ {specs_a['power_wp']}Wp",
+                        f"{mfr_b}: {w['module_count']:,} units @ {specs_b['power_wp']}Wp",
                         "Analysis: Frontside-only generation (no bifacial gains)",
                     ],
                 }
@@ -284,19 +284,19 @@ if specs_a and specs_b:
 
                 # Show results
                 st.success("✅ Analysis complete!")
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.metric("Module A - IRR", f"{r['irr']*100:.2f}%",
-                              f"Cost: Rs.{r['total_cost']/1e7:.1f}Cr")
-                    st.metric("Module A - Project Cost", f"Rs.{r['total_cost']/1e7:.2f}Cr",
-                              f"CUF: {r['cuf']*100:.1f}%")
-                with c2:
-                    st.metric("Module B - IRR", f"{w['irr']*100:.2f}%",
-                              f"Cost: Rs.{w['total_cost']/1e7:.1f}Cr")
-                    st.metric("Module B - Project Cost", f"Rs.{w['total_cost']/1e7:.2f}Cr",
-                              f"CUF: {w['cuf']*100:.1f}%")
-                with c3:
-                    best = "Module A" if r['irr'] >= w['irr'] else "Module B"
+                mcol1, mcol2, mcol3 = st.columns(3)
+                with mcol1:
+                    st.metric(f"{mfr_a} - IRR", f"{r['irr']*100:.2f}%", 
+                             delta=f"{(r['irr']-w['irr'])*100:.2f}%" if r['irr']>w['irr'] else None)
+                    st.metric(f"{mfr_a} - Project Cost", f"Rs.{r['total_cost']/1e7:.2f}Cr",
+                             delta=f"Rs.{(r['total_cost']-w['total_cost'])/1e7:.2f}Cr", delta_color="inverse")
+                with mcol2:
+                    st.metric(f"{mfr_b} - IRR", f"{w['irr']*100:.2f}%",
+                             delta=f"{(w['irr']-r['irr'])*100:.2f}%" if w['irr']>r['irr'] else None)
+                    st.metric(f"{mfr_b} - Project Cost", f"Rs.{w['total_cost']/1e7:.2f}Cr",
+                             delta=f"Rs.{(w['total_cost']-r['total_cost'])/1e7:.2f}Cr", delta_color="inverse")
+                with mcol3:
+                    best = mfr_a if r['irr'] >= w['irr'] else mfr_b
                     st.metric("Recommended", best,
                               f"IRR diff: {abs(r['irr']-w['irr'])*100:.2f}%")
                     st.metric("Gen Diff", f"{abs(w['total_gen_kwh']-r['total_gen_kwh'])/1e6:.1f}GWh",
