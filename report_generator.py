@@ -272,7 +272,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.sub_title("Key Findings")
     pdf.bul(f"{a_short} achieves an Equity IRR of {r['irr']*100:.2f}%; {b_short} achieves {w['irr']*100:.2f}%")
     pdf.bul(f"NPV ({a_short}): Rs. {r['npv']/1e7:.2f} Cr  |  NPV ({b_short}): Rs. {w['npv']/1e7:.2f} Cr")
-    pdf.bul(f"Equity required — {a_short}: Rs. {r['equity']/1e7:.2f} Cr  |  {b_short}: Rs. {w['equity']/1e7:.2f} Cr")
+    pdf.bul(f"Equity required  -  {a_short}: Rs. {r['equity']/1e7:.2f} Cr  |  {b_short}: Rs. {w['equity']/1e7:.2f} Cr")
     pdf.bul(f"Both modules achieve payback within {r['payback']} years")
     pdf.bul(f"{b_short} generates {((w['total_gen_kwh']/r['total_gen_kwh'])-1)*100:.1f}% more lifetime energy than {a_short}")
 
@@ -340,7 +340,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(1)
     pdf.sub_title("Site-Specific CUF Assumptions")
     pdf.bul(f"{a_short}: {r['cuf']*100:.1f}%")
-    pdf.bul(f"{b_short}: {w['cuf']*100:.1f}% — Superior low-light & temperature performance")
+    pdf.bul(f"{b_short}: {w['cuf']*100:.1f}%  -  Superior low-light & temperature performance")
 
     pvsyst_a = r.get("pvsyst", {})
     pvsyst_b = w.get("pvsyst", {})
@@ -578,7 +578,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         f"Rs. {best_lcoe:.2f}/kWh. DCR certification ensures bankability and investor confidence.")
     pdf.set_y(y_rec + box_h + 3)
 
-    # Italic note — only mention "higher NPV" if the other module genuinely has higher NPV
+    # Italic note  -  only mention "higher NPV" if the other module genuinely has higher NPV
     pdf.set_font("Helvetica", "I", 8.5)
     pdf.set_text_color(80, 80, 80)
     other_name = b_name if best_is_a else a_name
