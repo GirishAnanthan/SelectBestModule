@@ -53,7 +53,7 @@ class SolarReport(FPDF):
         self.set_text_color(40, 40, 40)
         x0 = self.l_margin
         self.set_x(x0 + 2)
-        self.cell(4, 4.2, "\u2022")
+        self.cell(4, 4.2, "-")
         self.set_x(x0 + 6)
         self.multi_cell(self.w - x0 - self.r_margin - 6, 4.2, t)
         self.set_x(x0)
@@ -216,7 +216,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.set_font("Helvetica", "", 13)
     pdf.set_text_color(50, 50, 50)
     pdf.cell(0, 7,
-             f"{info.get('plant_capacity','XX')} MW DC Solar Plant \u2014 {info.get('location','')}",
+             f"{info.get('plant_capacity','XX')} MW DC Solar Plant  -  {info.get('location','')}",
              align="C", new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(4)
@@ -230,7 +230,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(6)
 
     pdf.set_font("Helvetica", "", 9.5)
-    pdf.cell(0, 5.5, f"Prepared for: {info.get('customer_name','Client')} \u2022 {info.get('customer_company','N/A')}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5.5, f"Prepared for: {info.get('customer_name','Client')} - {info.get('customer_company','N/A')}", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 5.5, f"Date: {info.get('date','July 2026')}", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
 
@@ -398,7 +398,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.keep_with(pie_path,
         "Cost breakdown: proportion of module cost vs balance-of-system (BoS). "
         "Higher-wattage modules reduce count, lowering mounting hardware, cabling, and installation costs. "
-        "Module cost typically represents 55\u201365% of total project CAPEX.",
+        "Module cost typically represents 55-65% of total project CAPEX.",
         chart_w=100)
 
     # 5.2 Energy Generation
@@ -486,8 +486,8 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.stitle("7. Risk Analysis & Sensitivity")
 
     risks = [
-        ("PPA Tariff Risk",   "A Rs. 0.50/kWh reduction reduces IRR by ~3\u20134%. Both modules equally exposed."),
-        ("Generation Risk",   "10% lower CUF reduces IRR by ~4\u20135%. TOPCon's better temperature coefficient offers marginal protection."),
+        ("PPA Tariff Risk",   "A Rs. 0.50/kWh reduction reduces IRR by ~3-4%. Both modules equally exposed."),
+        ("Generation Risk",   "10% lower CUF reduces IRR by ~4-5%. TOPCon's better temperature coefficient offers marginal protection."),
         ("Interest Rate Risk","1% rate increase reduces IRR by ~1.5%. Lower-debt module has slightly better resilience."),
         ("Degradation Risk",  "Higher degradation impacts long-term returns. N-TOPCon has proven lower annual degradation."),
         ("Technology Risk",   "PERC is a mature technology; N-TOPCon is the next-generation platform with longer-term upgrade potential."),
