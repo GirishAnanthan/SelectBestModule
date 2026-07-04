@@ -108,6 +108,47 @@ class SolarReport(FPDF):
         self.ln()
 
 
+# ---------------------------------------------------------------------------
+# Land area helper
+# ---------------------------------------------------------------------------
+
+# Ground Coverage Ratio (module area : land area) by mounting type
+_GCR_LAND_FACTOR = {
+    "Fixed Tilt": 3.0,
+    "Single Axis Tracker": 3.5,
+    "Dual Axis Tracker": 5.0,
+}
+
+# Technology-standard module dimensions (length_mm, width_mm) when not parsed
+_DEFAULT_DIMS = {
+    "G12": (2384, 1303),   # 210mm cell, 132-cell
+    "182": (2278, 1134),   # 182mm cell, 132-cell
+    "default": (2278, 1134),
+}
+
+
+def _compute_land_area(module_dims, n_modules, mounting_type):
+    """Return (module_area_m2_total, land_area_m2, land_area_acres, land_area_ha).
+
+    module_dims: (length_mm, width_mm) or (None, None)
+    n_modules: integer count
+    mounting_type: str
+    """
+    L, W = module_dims
+    if L and W and L > 500 and W > 500:
+        mod_area = (L / 1000) * (W / 1000)   # m²
+    else:
+        L_d, W_d = _DEFAULT_DIMS["default"]
+        mod_area = (L_d / 1000) * (W_d / 1000)
+
+    factor = _GCR_LAND_FACTOR.get(mounting_type, 3.0)
+    total_mod_area = mod_area * n_modules
+    land_area_m2 = total_mod_area * factor
+    land_area_acres = land_area_m2 / 4046.86
+    land_area_ha = land_area_m2 / 10000
+    return total_mod_area, land_area_m2, land_area_acres, land_area_ha
+
+
 def generate_report(r, w, project_info, chart_dir, output_path):
     """Generate a complete investor-grade PDF report.
 
@@ -195,8 +236,51 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         f"The final decision should align with the investor's return expectations and risk appetite.")
     pdf.ln(1)
 
-    # ====== 2. PROJECT BACKGROUND ======
-    pdf.stitle("2. Project Background")
+    # ====== 2. PROJECT DETAILS ======
+    pdf.add_page()
+    pdf.stitle("2. Project Details")
+
+    # Compute land areas for both modules
+    dims_a = info.get("module_a_dims", (None, None))
+    dims_b = info.get("module_b_dims", (None, None))
+    n_a = info.get("module_a_count", r.get("module_count", 0))
+    n_b = info.get("module_b_count", w.get("module_count", 0))
+    mt = info.get("mounting_type", "Fixed Tilt")
+
+    _, land_m2_a, land_acres_a, land_ha_a = _compute_land_area(dims_a, n_a, mt)
+    _, land_m2_b, land_acres_b, land_ha_b = _compute_land_area(dims_b, n_b, mt)
+
+    pd_col = [80, 55, 55]
+    pdf.tbl_hdr(pd_col, ["Project Parameter", info.get("module_a_short", "Module A"), info.get("module_b_short", "Module B")])
+
+    pd_rows = [
+        ("Customer Name",        info.get("customer_name", ""),          info.get("customer_name", "")),
+        ("Company",              info.get("customer_company", ""),        info.get("customer_company", "")),
+        ("Project DC Capacity",  f"{info.get('plant_capacity', 'N/A')} MW DC", f"{info.get('plant_capacity', 'N/A')} MW DC"),
+        ("Location",             info.get("location", ""),               info.get("location", "")),
+        ("Module Brand",         info.get("module_a_brand", ""),         info.get("module_b_brand", "")),
+        ("Module Wattage",        f"{info.get('module_a_wp', 'N/A')} Wp",  f"{info.get('module_b_wp', 'N/A')} Wp"),
+        ("Number of Modules",    f"{n_a:,} nos",                          f"{n_b:,} nos"),
+        ("Mounting Structure",   mt,                                       mt),
+        ("Land Area Required",   f"{land_acres_a:.1f} acres ({land_ha_a:.1f} ha)",
+                                  f"{land_acres_b:.1f} acres ({land_ha_b:.1f} ha)"),
+        ("Analysis Basis",       "Frontside only (no bifacial)",          "Frontside only (no bifacial)"),
+        ("Plant Life",           "25 years",                              "25 years"),
+    ]
+    for i, (param, val_a, val_b) in enumerate(pd_rows):
+        pdf.tbl_row(pd_col, [param, val_a, val_b], fill=(i % 2 == 1))
+
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "I", 7.5)
+    pdf.set_text_color(100, 100, 100)
+    gcr = _GCR_LAND_FACTOR.get(mt, 3.0)
+    pdf.multi_cell(0, 4,
+        f"Land area estimated using a land-to-module-area factor of {gcr:.1f}x for {mt} mounting. "
+        "Actual land requirement may vary based on row spacing, access roads, transformer bays, and site boundary.")
+    pdf.ln(2)
+
+    # ====== 3. PROJECT BACKGROUND ======
+    pdf.stitle("3. Project Background")
     mounting_display = info.get('mounting_type', 'Fixed Tilt')
     if info.get('tilt_angle'):
         mounting_display += f" (Tilt: {info['tilt_angle']}\u00b0)"
@@ -246,8 +330,8 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         for i, row in enumerate(pv_rows):
             pdf.tbl_row(pv_col, row, fill=i % 2 == 1)
 
-    # ====== 3. TECHNICAL SPECIFICATIONS ======
-    pdf.stitle("3. Module Technical Specifications")
+    # ====== 4. TECHNICAL SPECIFICATIONS ======
+    pdf.stitle("4. Module Technical Specifications")
     pdf.ptext("The following specifications are extracted from manufacturer datasheets.")
     pdf.ln(1)
 
@@ -256,8 +340,8 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     for row in info.get('spec_rows', []):
         pdf.tbl_row(col, row, fill=info.get('spec_rows', []).index(row) % 2 == 1)
 
-    # ====== 4. FINANCIAL ANALYSIS ======
-    pdf.stitle("4. Financial Analysis & Projections")
+    # ====== 5. FINANCIAL ANALYSIS ======
+    pdf.stitle("5. Financial Analysis & Projections")
 
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 51, 102)
@@ -359,8 +443,8 @@ def generate_report(r, w, project_info, chart_dir, output_path):
         "degradation: higher degradation modules show a steeper decline in net income in later years.",
     ])
 
-    # ====== 5. METRICS COMPARISON ======
-    pdf.stitle("5. Key Financial Metrics Comparison")
+    # ====== 6. METRICS COMPARISON ======
+    pdf.stitle("6. Key Financial Metrics Comparison")
 
     irr_path = os.path.join(chart_dir, "chart_irr_npv.png")
     pdf.keep_with(irr_path,
@@ -396,12 +480,12 @@ def generate_report(r, w, project_info, chart_dir, output_path):
             continue
         pdf.tbl_row(cc2, row, bold=row[0] in ["Equity IRR (%)", "NPV @ 10% (Rs. Cr)"])
 
-    # ====== 6. RISK ANALYSIS ======
+    # ====== 7. RISK ANALYSIS ======
     pdf.add_page()
-    pdf.stitle("6. Risk Analysis & Sensitivity")
+    pdf.stitle("7. Risk Analysis & Sensitivity")
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 7, "6.1 Key Risk Factors", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, "7.1 Key Risk Factors", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
 
     risks = [
@@ -424,7 +508,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 7, "6.2 Sensitivity Analysis", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, "7.2 Sensitivity Analysis", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
     price_diff = abs(w['price_wp'] - r['price_wp'])
     cheaper = info.get('module_a_short', 'A') if r['price_wp'] <= w['price_wp'] else info.get('module_b_short', 'B')
@@ -432,12 +516,12 @@ def generate_report(r, w, project_info, chart_dir, output_path):
               f"{cheaper}'s price advantage of Rs. {price_diff:.0f}/Wp "
               f"is a key factor in the comparative returns analysis.")
 
-    # ====== 7. CONCLUSION ======
+    # ====== 8. CONCLUSION ======
     pdf.add_page()
-    pdf.stitle("7. Conclusion & Recommendation")
+    pdf.stitle("8. Conclusion & Recommendation")
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 8, "7.1 Comparative Assessment", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, "8.1 Comparative Assessment", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
     pdf.ptext("The analysis reveals a nuanced comparison between the two module options:")
 
@@ -470,7 +554,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(0, 51, 102)
-    pdf.cell(0, 8, "7.2 Final Recommendation", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, "8.2 Final Recommendation", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
 
     y_rec = pdf.get_y()

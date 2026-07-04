@@ -13,60 +13,29 @@ from pdf_parser import extract_module_specs, format_specs_for_display, extract_t
 from financial_engine import run_analysis
 from report_generator import generate_report
 
-st.set_page_config(page_title="Solar Module Comparison", page_icon="\u2600\ufe0f", layout="wide")
-st.title("\u2600\ufe0f Solar Module Investment Comparison Engine")
+st.set_page_config(page_title="Solar Module Comparison", page_icon="☀️", layout="wide")
+st.title("☀️ Solar Module Investment Comparison Engine")
 st.markdown("Upload datasheets for two solar modules. The system automatically extracts specifications.")
 
 # ----- CACHED HELPERS -----
 @st.cache_data(show_spinner=False)
-def cached_parse(pdf_bytes, default_tech, _version=3):
+def cached_parse(pdf_bytes, default_tech, _version=5):
+    """Initial parse — detect power options and basic specs (no selected_wp yet)."""
     return extract_module_specs(pdf_bytes, default_tech)
+
+@st.cache_data(show_spinner=False)
+def cached_parse_wp(pdf_bytes, default_tech, selected_wp, _version=5):
+    """Re-parse with a specific selected_wp for focused electrical extraction."""
+    return extract_module_specs(pdf_bytes, default_tech, selected_wp=selected_wp)
 
 @st.cache_data(show_spinner=False)
 def cached_extract_text(pdf_bytes):
     text, method = extract_text_from_pdf(pdf_bytes)
     return text, method
 
-def extract_wp_data(text, selected_wp, default_tech):
-    """Extract electrical data for a specific Wp from raw PDF text."""
-    specs = {}
-    power_str = str(selected_wp)
-    lines = text.split('\n')
-    for line in lines:
-        if power_str not in line:
-            continue
-        clean = re.sub(r'[A-Za-z]+[-\d]*\s', '', line)
-        nums = [float(n) for n in re.findall(r'(\d+\.?\d*)', clean)]
-        if len(nums) >= 11:
-            for i in range(len(nums) - 10):
-                chunk = nums[i:i+11]
-                pw1, pw2 = chunk[0], chunk[1]
-                v_s, v_n = chunk[2], chunk[3]
-                i_s, i_n = chunk[4], chunk[5]
-                isc_s, isc_n = chunk[6], chunk[7]
-                voc_s, voc_n = chunk[8], chunk[9]
-                eff = chunk[10]
-                if (300 <= pw1 <= 800 and 300 <= pw2 <= 800 and
-                    25 <= v_s <= 55 and v_n < v_s and
-                    8 <= i_s <= 20 and i_n < i_s and
-                    8 <= isc_s <= 22 and isc_n < isc_s and
-                    35 <= voc_s <= 60 and voc_n < voc_s and
-                    18 <= eff <= 26):
-                    specs.update(vmp=v_s, imp=i_s, isc=isc_s, voc=voc_s, efficiency_pct=eff)
-                    return specs
-        feasible = [n for n in nums if 8 <= n <= 60]
-        for idx in range(len(feasible) - 4):
-            v, imp_, isc_, voc = feasible[idx:idx+4]
-            if 25 <= v <= 55 and 8 <= imp_ <= 20 and 8 <= isc_ <= 22 and 35 <= voc <= 60:
-                specs.update(vmp=v, imp=imp_, isc=isc_, voc=voc)
-                if idx+4 < len(feasible) and 18 <= feasible[idx+4] <= 26:
-                    specs["efficiency_pct"] = feasible[idx+4]
-                return specs
-    return specs
-
 # ===== SIDEBAR: Customer & Financial =====
 with st.sidebar:
-    st.header("\U0001f3e2 Customer & Project")
+    st.header("🏢 Customer & Project")
     customer_name = st.text_input("Customer Name", "Raghavan")
     customer_company = st.text_input("Company", "Raghavan Group")
     project_name = st.text_input("Project Name", "19.6 MW Solar Plant - Pudukottai")
@@ -76,7 +45,7 @@ with st.sidebar:
     with col_lat: latitude = st.number_input("Latitude", -90.0, 90.0, 10.38, 0.01, format="%.2f")
     with col_lon: longitude = st.number_input("Longitude", -180.0, 180.0, 78.82, 0.01, format="%.2f")
     st.markdown("---")
-    st.header("\U0001f4b0 Financial Parameters")
+    st.header("💰 Financial Parameters")
     ppa_tariff = st.number_input("PPA Tariff (Rs./kWh)", 1.0, 10.0, 4.50, 0.25)
     debt_ratio = st.slider("Debt Ratio", 0.5, 0.9, 0.70, 0.05)
     interest_rate = st.number_input("Interest Rate (% p.a.)", 5.0, 20.0, 9.0, 0.5) / 100
@@ -84,7 +53,7 @@ with st.sidebar:
     discount_rate = st.number_input("Discount Rate / WACC (%)", 5.0, 20.0, 10.0, 0.5) / 100
     bos_cost = st.number_input("BoS, EPC & Land (Rs./Wp)", 5.0, 30.0, 12.0, 0.5)
     st.markdown("---")
-    st.header("\U0001f3d7\ufe0f Mounting Structure")
+    st.header("🏗️ Mounting Structure")
     mounting_type = st.radio(
         "Select Mounting Type",
         ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"],
@@ -96,7 +65,7 @@ with st.sidebar:
         tilt_angle = st.number_input(
             "Tilt Angle (degrees from horizontal)",
             0, 60, 10, 1,
-            help="Optimal tilt for this latitude is approximately 9\u00b0"
+            help="Optimal tilt for this latitude is approximately 9°"
         )
     st.info("Module prices are entered below per-module after datasheet upload.")
 
@@ -105,7 +74,7 @@ col1, col2 = st.columns(2)
 
 def handle_module(col, label, default_tech):
     with col:
-        st.subheader(f"\U0001f4c4 {label}")
+        st.subheader(f"📄 {label}")
         uploaded = st.file_uploader(f"Upload {label} Datasheet (PDF)", type=["pdf"],
                                      key=f"upload_{label}")
         if uploaded is None:
@@ -113,11 +82,9 @@ def handle_module(col, label, default_tech):
             return None
 
         pdf_bytes = uploaded.read()
-        key = hashlib.md5(pdf_bytes).hexdigest()
 
-        # Parse PDF (cached - only runs when file changes)
+        # Initial parse: detect power options and coarse specs
         specs = cached_parse(pdf_bytes, default_tech)
-
         st.success(f"Extracted via {specs.get('_extraction_method', 'N/A')}")
 
         if specs.get("power_options"):
@@ -131,15 +98,10 @@ def handle_module(col, label, default_tech):
                 key=f"wp_{label}",
                 help="Choose the Wp rating you plan to deploy"
             )
-            specs["power_wp"] = selected_wp
 
-            # Extract Wp-specific electrical data (cached by pdf hash + wp)
-            text_key = f"text_{key}"
-            if text_key not in st.session_state:
-                st.session_state[text_key], _ = cached_extract_text(pdf_bytes)
-            text = st.session_state[text_key]
-            wp_data = extract_wp_data(text, selected_wp, default_tech)
-            specs.update(wp_data)
+            # Re-parse focused on the selected wattage for accurate electrical params
+            specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+            specs["power_wp"] = int(selected_wp)
         else:
             st.warning("Could not detect power ratings. Enter manually below.")
             selected_wp = st.number_input(
@@ -154,8 +116,9 @@ def handle_module(col, label, default_tech):
             key=f"price_{label}",
             help="Enter the price at which this module is available")
         specs["price_per_wp"] = price
+        specs["_filename"] = uploaded.name
 
-        with st.expander(f"\U0001f50d {label} - Extracted Specifications", expanded=False):
+        with st.expander(f"🔍 {label} - Extracted Specifications", expanded=False):
             st.text(format_specs_for_display(specs))
 
         st.caption("Edit any incorrectly extracted values below:")
@@ -164,10 +127,10 @@ def handle_module(col, label, default_tech):
         voc = st.number_input("Voc (V)", 0.0, 100.0, float(specs.get("voc", 0) or 0), key=f"voc_{label}")
         isc = st.number_input("Isc (A)", 0.0, 30.0, float(specs.get("isc", 0) or 0), key=f"isc_{label}")
         eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(specs.get("efficiency_pct", 0) or 0), key=f"eff_{label}")
-        tc = st.number_input("Temp Coeff Pmax (%/°C)", 0.0, 1.0, float(abs(specs.get("temp_coeff_pmax", 0) or 0)), key=f"tc_{label}")
-        deg_y1 = st.number_input("Y1 Degradation (%)", 0.0, 5.0, float(specs.get("deg_y1_pct", 0) or 0), key=f"deg_y1_{label}")
+        tc  = st.number_input("Temp Coeff Pmax (%/°C)", 0.0, 1.0, float(abs(specs.get("temp_coeff_pmax", 0) or 0)), key=f"tc_{label}")
+        deg_y1  = st.number_input("Y1 Degradation (%)", 0.0, 5.0, float(specs.get("deg_y1_pct", 0) or 0), key=f"deg_y1_{label}")
         deg_ann = st.number_input("Annual Degradation (%)", 0.0, 1.0, float(specs.get("deg_annual_pct", 0) or 0), key=f"deg_ann_{label}")
-        pw = st.number_input("Power Warranty (years)", 0, 40, int(specs.get("warranty_power", 0) or 0), key=f"pw_{label}")
+        pw   = st.number_input("Power Warranty (years)", 0, 40, int(specs.get("warranty_power", 0) or 0), key=f"pw_{label}")
         noct = st.number_input("NOCT (°C)", 0, 60, int(specs.get("noct", 0) or 0), key=f"noct_{label}")
         specs.update(
             vmp=vmp if vmp else specs.get("vmp"),
@@ -207,7 +170,7 @@ def _get_mfr_name(specs, uploaded_widget, fallback="Module"):
 # ===== GENERATE REPORT =====
 st.markdown("---")
 if specs_a and specs_b:
-    if st.button("\u2699\ufe0f GENERATE TECHNO COMMERCIAL COMPARISON", type="primary", width='stretch'):
+    if st.button("⚙️ GENERATE TECHNO COMMERCIAL COMPARISON", type="primary", width='stretch'):
         with st.spinner("Running comprehensive analysis..."):
             project_params = {
                 "capacity_mw": plant_capacity, "latitude": latitude,
@@ -255,20 +218,24 @@ if specs_a and specs_b:
                     v = specs.get(key, default)
                     return str(v) if v is not None else str(default)
 
+                mfr_a = specs_a.get("manufacturer") or _get_mfr_name(specs_a, uploaded_a, "Module 1")
+                mfr_b = specs_b.get("manufacturer") or _get_mfr_name(specs_b, uploaded_b, "Module 2")
+
                 spec_rows = [
-                    ["Model", safe_val(specs_a, "power_wp") + "Wp", safe_val(specs_b, "power_wp") + "Wp", ""],
-                    ["Technology", safe_val(specs_a, "technology"), safe_val(specs_b, "technology"), ""],
-                    ["Modules Required", f'{r["module_count"]:,}', f'{w["module_count"]:,}', ""],
-                    ["Efficiency", f'{specs_a.get("efficiency_pct", 0):.2f}%', f'{specs_b.get("efficiency_pct", 0):.2f}%', ""],
-                    ["Vmp", f'{specs_a.get("vmp", 0):.2f}V', f'{specs_b.get("vmp", 0):.2f}V', ""],
-                    ["Imp", f'{specs_a.get("imp", 0):.2f}A', f'{specs_b.get("imp", 0):.2f}A', ""],
-                    ["Voc", f'{specs_a.get("voc", 0):.2f}V', f'{specs_b.get("voc", 0):.2f}V', ""],
-                    ["Isc", f'{specs_a.get("isc", 0):.2f}A', f'{specs_b.get("isc", 0):.2f}A', ""],
-                    ["Temp Coeff Pmax", f'{specs_a.get("temp_coeff_pmax", 0):.2f}/C', f'{specs_b.get("temp_coeff_pmax", 0):.2f}/C', ""],
-                    ["Degradation Y1", f'{specs_a.get("deg_y1_pct", 0):.1f}%', f'{specs_b.get("deg_y1_pct", 0):.1f}%', ""],
-                    ["Degradation Annual", f'{specs_a.get("deg_annual_pct", 0):.2f}%', f'{specs_b.get("deg_annual_pct", 0):.2f}%', ""],
-                    ["Power Warranty", f'{specs_a.get("warranty_power", 0)}yr', f'{specs_b.get("warranty_power", 0)}yr', ""],
-                    ["Price", f'Rs.{specs_a["price_per_wp"]}/Wp', f'Rs.{specs_b["price_per_wp"]}/Wp', ""],
+                    ["Model",              safe_val(specs_a, "power_wp") + "Wp",    safe_val(specs_b, "power_wp") + "Wp",    ""],
+                    ["Technology",         safe_val(specs_a, "technology"),          safe_val(specs_b, "technology"),          ""],
+                    ["Manufacturer",       mfr_a,                                    mfr_b,                                    ""],
+                    ["Modules Required",   f'{r["module_count"]:,}',                 f'{w["module_count"]:,}',                 "nos"],
+                    ["Efficiency",         f'{specs_a.get("efficiency_pct", 0):.2f}%',f'{specs_b.get("efficiency_pct", 0):.2f}%',""],
+                    ["Vmp",               f'{specs_a.get("vmp", 0):.2f}V',          f'{specs_b.get("vmp", 0):.2f}V',          "V"],
+                    ["Imp",               f'{specs_a.get("imp", 0):.2f}A',          f'{specs_b.get("imp", 0):.2f}A',          "A"],
+                    ["Voc",               f'{specs_a.get("voc", 0):.2f}V',          f'{specs_b.get("voc", 0):.2f}V',          "V"],
+                    ["Isc",               f'{specs_a.get("isc", 0):.2f}A',          f'{specs_b.get("isc", 0):.2f}A',          "A"],
+                    ["Temp Coeff Pmax",   f'{specs_a.get("temp_coeff_pmax", 0):.3f}%/C', f'{specs_b.get("temp_coeff_pmax", 0):.3f}%/C', "%/°C"],
+                    ["Degradation Y1",    f'{specs_a.get("deg_y1_pct", 0):.1f}%',   f'{specs_b.get("deg_y1_pct", 0):.1f}%',   "%"],
+                    ["Degradation Annual",f'{specs_a.get("deg_annual_pct", 0):.2f}%',f'{specs_b.get("deg_annual_pct", 0):.2f}%',"%"],
+                    ["Power Warranty",    f'{specs_a.get("warranty_power", 0)}yr',   f'{specs_b.get("warranty_power", 0)}yr',   "years"],
+                    ["Price",             f'Rs.{specs_a["price_per_wp"]}/Wp',        f'Rs.{specs_b["price_per_wp"]}/Wp',        ""],
                 ]
 
                 project_info = {
@@ -282,10 +249,25 @@ if specs_a and specs_b:
                     "module_b_name": f"Module 2 ({safe_val(specs_b, 'power_wp')}Wp)",
                     "module_a_short": "Module A", "module_b_short": "Module B",
                     "spec_rows": spec_rows,
+                    # Extended fields for Project Details section
+                    "module_a_brand": mfr_a,
+                    "module_b_brand": mfr_b,
+                    "module_a_wp": specs_a["power_wp"],
+                    "module_b_wp": specs_b["power_wp"],
+                    "module_a_count": r["module_count"],
+                    "module_b_count": w["module_count"],
+                    "module_a_dims": (
+                        specs_a.get("length_mm") or specs_a.get("length"),
+                        specs_a.get("width_mm") or specs_a.get("width"),
+                    ),
+                    "module_b_dims": (
+                        specs_b.get("length_mm") or specs_b.get("length"),
+                        specs_b.get("width_mm") or specs_b.get("width"),
+                    ),
                     "project_params": [
                         f"Location: {location} ({latitude}, {longitude})",
                         f"Plant Capacity: {plant_capacity:.1f} MW DC",
-                        f"Configuration: {mounting_type}{' (Tilt: '+str(tilt_angle)+')' if tilt_angle else ''} ground mount",
+                        f"Configuration: {mounting_type}{' (Tilt: '+str(tilt_angle)+'°)' if tilt_angle else ''} ground mount",
                         f"PPA Tariff: Rs. {ppa_tariff:.2f}/kWh",
                         "Plant Life: 25 years",
                         f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
@@ -301,7 +283,7 @@ if specs_a and specs_b:
                 generate_report(r, w, project_info, tmpdir, report_path)
 
                 # Show results
-                st.success("\u2705 Analysis complete!")
+                st.success("✅ Analysis complete!")
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.metric("Module A - IRR", f"{r['irr']*100:.2f}%",
@@ -347,14 +329,14 @@ if specs_a and specs_b:
                 with open(report_path, "rb") as f:
                     report_data = f.read()
                 st.download_button(
-                    "\U0001f4e5 PRINT / SAVE INVESTMENT GRADE PDF REPORT",
+                    "📥 PRINT / SAVE INVESTMENT GRADE PDF REPORT",
                     data=report_data,
                     file_name=report_filename,
                     mime="application/pdf",
                     width='stretch',
                     type="primary",
                 )
-                st.info("The report includes: Executive Summary, Project Background, "
+                st.info("The report includes: Executive Summary, Project Details, Project Background, "
                         "Module Specifications, CAPEX, Energy Projections, Cash Flow, "
                         "Financial Metrics (IRR/NPV/LCOE), PVSyst Simulation Data, Risk Analysis, and Recommendation.")
 else:
