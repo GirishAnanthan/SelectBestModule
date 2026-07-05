@@ -114,31 +114,41 @@ class SolarReport(FPDF):
     def tbl_hdr(self, col_w, headers):
         self.set_x(self.l_margin)
         self.set_font("Helvetica", "B", 8)
-        self.set_fill_color(0, 51, 102)
         self.set_text_color(255, 255, 255)
         rh = self._row_h(col_w, headers, 5.0)
         x0, y0 = self.get_x(), self.get_y()
+        if y0 + rh > self.h - self.b_margin:
+            self.add_page()
+            x0, y0 = self.get_x(), self.get_y()
+        tw = sum(col_w)
+        self.set_fill_color(0, 51, 102)
+        self.rect(x0, y0, tw, rh, style="F")
         for i, h in enumerate(headers):
-            self.set_xy(x0 + sum(col_w[:i]), y0)
-            self.multi_cell(col_w[i], 5.0, str(h), border=1, align="C", fill=True)
+            self.set_xy(x0 + sum(col_w[:i]) + 0.5, y0 + 0.5)
+            self.multi_cell(col_w[i] - 1, 5.0, str(h), align="C")
+        for i in range(len(headers)):
+            self.rect(x0 + sum(col_w[:i]), y0, col_w[i], rh, style="D")
         self.set_xy(x0, y0 + rh)
 
     def tbl_row(self, col_w, cells, bold=False, fill=False):
         self.set_x(self.l_margin)
         self.set_font("Helvetica", "B" if bold else "", 7.5)
         self.set_text_color(0, 0, 0)
-        bg = (220, 230, 245) if fill else (255, 255, 255)
-        self.set_fill_color(*bg)
         rh = self._row_h(col_w, cells, 4.2)
         x0, y0 = self.get_x(), self.get_y()
         if y0 + rh > self.h - self.b_margin:
             self.add_page()
             x0, y0 = self.get_x(), self.get_y()
+        tw = sum(col_w)
+        bg = (220, 230, 245) if fill else (255, 255, 255)
+        self.set_fill_color(*bg)
+        self.rect(x0, y0, tw, rh, style="F")
         for i, c in enumerate(cells):
-            self.set_xy(x0 + sum(col_w[:i]), y0)
             align = "L" if i == 0 else "C"
-            self.multi_cell(col_w[i], 4.2, str(c), border=1, align=align,
-                           fill=fill or bold)
+            self.set_xy(x0 + sum(col_w[:i]) + 0.5, y0 + 0.5)
+            self.multi_cell(col_w[i] - 1, 4.2, str(c), align=align)
+        for i in range(len(col_w)):
+            self.rect(x0 + sum(col_w[:i]), y0, col_w[i], rh, style="D")
         self.set_xy(x0, y0 + rh)
 
     def tbl_block(self, col_w, headers, rows, bold_rows=None, alt_fill=True):
