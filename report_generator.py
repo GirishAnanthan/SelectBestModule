@@ -1,4 +1,6 @@
-"""PDF Report Generator - Professional compact layout"""
+"""
+PDF Report Generator - Professional compact layout for N-module comparison.
+"""
 import os
 from fpdf import FPDF
 from PIL import Image
@@ -24,21 +26,14 @@ class SolarReport(FPDF):
         self.set_text_color(140, 140, 140)
         self.cell(0, 5, f"Page {self.page_no()}/{{nb}}", align="C")
 
-    # --- layout helpers ---
-
     def avail(self):
-        """Remaining vertical space on the current page (mm)."""
         return self.h - self.b_margin - self.get_y()
 
     def need(self, h, extra=0):
-        """Insert a page break if less than h+extra mm remain."""
         if self.avail() < h + extra:
             self.add_page()
 
-    # --- typography helpers ---
-
     def stitle(self, t):
-        """Major section heading (blue + underline). Keeps at least 20 mm below it."""
         self.need(20)
         self.ln(1)
         self.set_font("Helvetica", "B", 10.5)
@@ -49,7 +44,6 @@ class SolarReport(FPDF):
         self.ln(1.5)
 
     def sub_title(self, t):
-        """Sub-section heading. Keeps at least 15 mm below it."""
         self.need(15)
         self.ln(0.5)
         self.set_font("Helvetica", "B", 9.5)
@@ -73,7 +67,6 @@ class SolarReport(FPDF):
         self.set_x(x0)
 
     def note(self, t):
-        """Small italic footnote."""
         self.set_font("Helvetica", "I", 7.5)
         self.set_text_color(110, 110, 110)
         self.multi_cell(0, 3.8, t)
@@ -98,8 +91,6 @@ class SolarReport(FPDF):
             self.set_text_color(110, 110, 110)
             self.cell(w - 4, 3, sub)
 
-    # --- table helpers ---
-
     def tbl_hdr(self, col_w, headers):
         self.set_font("Helvetica", "B", 8)
         self.set_fill_color(0, 51, 102)
@@ -121,7 +112,6 @@ class SolarReport(FPDF):
         self.ln()
 
     def tbl_block(self, col_w, headers, rows, bold_rows=None, alt_fill=True):
-        """Render a full table, ensuring it starts on a new page if it won't fit."""
         bold_rows = bold_rows or []
         row_h = 5
         hdr_h = 5.5
@@ -134,8 +124,6 @@ class SolarReport(FPDF):
                          fill=(alt_fill and i % 2 == 1))
 
     def chart(self, path, caption="", w_mm=None, center=False):
-        """Insert a chart image with optional short caption.
-        Uses need() to avoid orphaning the chart at the bottom of a page."""
         if not os.path.exists(path):
             return
         try:
@@ -183,7 +171,6 @@ def _compute_land_area(module_dims, n_modules, mounting_type):
 
 
 def _fw(pdf, splits):
-    """Proportional column widths filling the printable width."""
     total = pdf.w - pdf.l_margin - pdf.r_margin
     s = sum(splits)
     return [total * x / s for x in splits]
@@ -193,8 +180,10 @@ def _fw(pdf, splits):
 # Main generator
 # ---------------------------------------------------------------------------
 
-def generate_report(r, w, project_info, chart_dir, output_path):
+def generate_report(results, project_info, chart_dir, output_path):
     info = project_info
+    mod_names = list(results.keys())
+    n_mods = len(mod_names)
 
     pdf = SolarReport()
     pdf.header_text = (
@@ -205,24 +194,22 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.set_auto_page_break(auto=True, margin=14)
     pdf.set_margins(12, 12, 12)
 
-    a_short = info.get("module_a_short", "Module A")
-    b_short = info.get("module_b_short", "Module B")
-    a_name  = info.get("module_a_name",  "Module A")
-    b_name  = info.get("module_b_name",  "Module B")
+    mod_info = info.get("mod_info", [])
+    scored = info.get("scored", [])
+    score_headers = info.get("score_headers", [])
+    score_rows = info.get("score_rows", [])
 
-    best_is_a = r["irr"] >= w["irr"]
-    best_name = a_name if best_is_a else b_name
-    best_irr  = r["irr"] if best_is_a else w["irr"]
-    best_mod  = r if best_is_a else w
-    other_mod = w if best_is_a else r
-    other_name = b_name if best_is_a else a_name
+    # Determine best module by weighted score
+    best_mod_name = scored[0]["short"] if scored else mod_names[0]
+    best_name = scored[0]["name"] if scored else mod_names[0]
+    best_r = results[best_mod_name]
+    best_irr = best_r["irr"]
 
     # =========================================================
     # COVER PAGE
     # =========================================================
     pdf.add_page()
 
-    # Title block
     pdf.ln(8)
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_text_color(0, 51, 102)
@@ -231,7 +218,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(60, 60, 60)
     pdf.cell(0, 6,
-             f"{info.get('plant_capacity','XX')} MW DC Solar Plant - {info.get('location','')}",
+             f"{info.get('plant_capacity', 'XX')} MW DC Solar Plant - {info.get('location', '')}",
              align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
     pdf.set_draw_color(0, 51, 102)
@@ -239,68 +226,118 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(4)
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(70, 70, 70)
-    pdf.cell(0, 5.5, f"{a_name}  vs  {b_name}", align="C",
+    mod_display = "  vs  ".join([m.get("name", n) for m, n in zip(mod_info, mod_names)])
+    pdf.cell(0, 5.5, mod_display, align="C",
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
     pdf.set_font("Helvetica", "", 9)
     pdf.cell(0, 5,
-             f"Prepared for: {info.get('customer_name','Client')} - {info.get('customer_company','N/A')}",
+             f"Prepared for: {info.get('customer_name', 'Client')} - {info.get('customer_company', 'N/A')}",
              align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 5, f"Date: {info.get('date','July 2026')}", align="C",
+    pdf.cell(0, 5, f"Date: {info.get('date', 'July 2026')}", align="C",
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
 
-    # KPI boxes
+    # KPI boxes — N + 1 (one per module + payback + recommended)
     pw = pdf.w - pdf.l_margin - pdf.r_margin
-    bw = pw / 4 - 1.5
+    boxes_per_row = min(n_mods + 2, 5)
+    bw = pw / boxes_per_row - 1.5
     by = pdf.get_y()
     bx = pdf.l_margin
-    pdf.box("Module A - Equity IRR",  f"{r['irr']*100:.2f}%",
-            f"NPV Rs.{r['npv']/1e7:.1f} Cr",     x=bx,           y=by, w=bw, h=20)
-    pdf.box("Module B - Equity IRR",  f"{w['irr']*100:.2f}%",
-            f"NPV Rs.{w['npv']/1e7:.1f} Cr",     x=bx+bw+1.5,   y=by, w=bw, h=20)
-    pdf.box("Payback Period",         f"{r['payback']}/{w['payback']} yr",
-            "A / B (equity recovery)", x=bx+(bw+1.5)*2, y=by, w=bw, h=20)
-    pdf.box("Recommended Module",     best_name.split()[0],
-            f"IRR {best_irr*100:.2f}%",           x=bx+(bw+1.5)*3, y=by, w=bw, h=20)
+
+    for i, name in enumerate(mod_names):
+        r = results[name]
+        short = mod_info[i]["short"] if i < len(mod_info) else name
+        pdf.box(
+            f"{short} - Equity IRR",
+            f"{r['irr']*100:.2f}%",
+            f"NPV Rs.{r['npv']/1e7:.1f} Cr",
+            x=bx + (bw + 1.5) * i,
+            y=by,
+            w=bw,
+            h=20,
+        )
+
+    # Payback box
+    paybacks = "/".join([str(results[n]["payback"]) for n in mod_names])
+    pdf.box(
+        "Payback Period",
+        f"{paybacks} yr",
+        "equity recovery",
+        x=bx + (bw + 1.5) * min(n_mods, boxes_per_row - 2),
+        y=by,
+        w=bw,
+        h=20,
+    )
+
+    # Recommended box
+    pdf.box(
+        "Recommended",
+        best_mod_name,
+        f"Score: {scored[0]['weighted_total']:.1f}" if scored else f"IRR {best_irr*100:.2f}%",
+        x=bx + (bw + 1.5) * min(n_mods + 1, boxes_per_row - 1),
+        y=by,
+        w=bw,
+        h=20,
+    )
     pdf.set_y(by + 23)
 
-    # Cover summary table  -  Project Highlights
+    # Cover summary table
     pdf.ln(4)
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_text_color(0, 51, 102)
     pdf.cell(0, 5, "Project & Financial Highlights", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
 
-    hi_col = _fw(pdf, [2.5, 1.5, 1.5])
-    pdf.tbl_hdr(hi_col, ["Parameter", a_short, b_short])
-    hi_rows = [
-        ("Project DC Capacity",  f"{info.get('plant_capacity','N/A')} MW DC",
-                                  f"{info.get('plant_capacity','N/A')} MW DC"),
-        ("Module Brand",         info.get("module_a_brand", a_short),
-                                  info.get("module_b_brand", b_short)),
-        ("Module Wattage",       f"{info.get('module_a_wp','N/A')} Wp",
-                                  f"{info.get('module_b_wp','N/A')} Wp"),
-        ("Total Project Cost",   f"Rs. {r['total_cost']/1e7:.2f} Cr",
-                                  f"Rs. {w['total_cost']/1e7:.2f} Cr"),
-        ("Equity @ 30%",         f"Rs. {r['equity']/1e7:.2f} Cr",
-                                  f"Rs. {w['equity']/1e7:.2f} Cr"),
-        ("Year 1 Generation",    f"{r['gen_y1_kwh']/1e3:,.0f} MWh",
-                                  f"{w['gen_y1_kwh']/1e3:,.0f} MWh"),
-        ("Equity IRR",           f"{r['irr']*100:.2f}%",
-                                  f"{w['irr']*100:.2f}%"),
-        ("NPV @ 10% Disc.",      f"Rs. {r['npv']/1e7:.2f} Cr",
-                                  f"Rs. {w['npv']/1e7:.2f} Cr"),
-        ("LCOE",                  f"Rs. {r['lcoe']:.3f}/kWh",
-                                  f"Rs. {w['lcoe']:.3f}/kWh"),
-        ("Payback Period",        f"{r['payback']} years",
-                                  f"{w['payback']} years"),
-    ]
+    # Dynamic column widths for N modules
+    hi_col = _fw(pdf, [2.5] + [1.5] * n_mods)
+    hi_headers = ["Parameter"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+                                   for i in range(n_mods)]
+    hi_rows = []
+    hi_rows.append(["Project DC Capacity"] + [f"{info.get('plant_capacity', 'N/A')} MW DC"] * n_mods)
+    hi_rows.append(["Module Brand"] + [info.get(f"module_{chr(97+i)}_brand",
+                                                  mod_info[i]["brand"] if i < len(mod_info) else mod_names[i])
+                                        for i in range(n_mods)])
+
+    wp_row = []
+    count_row = []
+    cost_row = []
+    equity_row = []
+    gen_row = []
+    irr_row = []
+    npv_row = []
+    lcoe_row = []
+    payback_row = []
+    for name in mod_names:
+        r = results[name]
+        idx = mod_names.index(name)
+        wp_row.append(f"{mod_info[idx]['wp'] if idx < len(mod_info) else 'N/A'} Wp")
+        count_row.append(f"{r['module_count']:,}")
+        cost_row.append(f"Rs. {r['total_cost']/1e7:.2f} Cr")
+        equity_row.append(f"Rs. {r['equity']/1e7:.2f} Cr")
+        gen_row.append(f"{r['gen_y1_kwh']/1e3:,.0f} MWh")
+        irr_row.append(f"{r['irr']*100:.2f}%")
+        npv_row.append(f"Rs. {r['npv']/1e7:.2f} Cr")
+        lcoe_row.append(f"Rs. {r['lcoe']:.3f}/kWh")
+        payback_row.append(f"{r['payback']} years")
+
+    hi_rows.append(["Module Wattage"] + wp_row)
+    hi_rows.append(["Modules Required"] + count_row)
+    hi_rows.append(["Total Project Cost"] + cost_row)
+    hi_rows.append(["Equity @ 30%"] + equity_row)
+    hi_rows.append(["Year 1 Generation"] + gen_row)
+    hi_rows.append(["Equity IRR"] + irr_row)
+    hi_rows.append(["NPV @ 10% Disc."] + npv_row)
+    hi_rows.append(["LCOE"] + lcoe_row)
+    hi_rows.append(["Payback Period"] + payback_row)
+
+    irr_idxs = [i for i, row in enumerate(hi_rows) if "IRR" in row[0] or "NPV" in row[0]]
     for i, row in enumerate(hi_rows):
-        bold = row[0] in ("Equity IRR", "NPV @ 10% Disc.")
+        bold = i in irr_idxs
         pdf.tbl_row(hi_col, row, bold=bold, fill=i % 2 == 1)
 
     pdf.ln(4)
+
     # Recommendation highlight on cover
     y0 = pdf.get_y()
     h0 = 20
@@ -312,8 +349,8 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.set_text_color(0, 80, 0)
     pdf.multi_cell(pw - 8, 5,
         f"RECOMMENDATION: {best_name} - Equity IRR {best_irr*100:.2f}% | "
-        f"NPV Rs. {best_mod['npv']/1e7:.2f} Cr | LCOE Rs. {best_mod['lcoe']:.3f}/kWh | "
-        f"Equity Rs. {best_mod['equity']/1e7:.2f} Cr")
+        f"NPV Rs. {best_r['npv']/1e7:.2f} Cr | LCOE Rs. {best_r['lcoe']:.3f}/kWh | "
+        f"Equity Rs. {best_r['equity']/1e7:.2f} Cr")
     pdf.set_y(y0 + h0 + 3)
 
     pdf.ln(3)
@@ -333,29 +370,35 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     if info.get("tilt_angle"):
         mounting_display += f" (Tilt: {info['tilt_angle']})"
 
+    mod_list_text = ", ".join([mod_info[i]["name"] if i < len(mod_info) else mod_names[i]
+                                for i in range(n_mods)])
     pdf.ptext(
-        f"This report presents a technical and financial comparison of two DCR-compliant solar PV modules "
-        f"for a {info.get('plant_capacity','XX')} MW DC ground-mount plant at {info.get('location','the site')}. "
-        f"{a_name} is evaluated against {b_name} on a {mounting_display} configuration. "
-        f"Analysis is on frontside-only generation (conservative; bifacial gains excluded)."
+        f"This report presents a technical and financial comparison of {n_mods} DCR-compliant "
+        f"solar PV modules for a {info.get('plant_capacity', 'XX')} MW DC ground-mount plant "
+        f"at {info.get('location', 'the site')}. "
+        f"The following modules are evaluated: {mod_list_text} on a {mounting_display} configuration."
     )
 
     pdf.sub_title("Key Findings")
-    pdf.bul(f"{a_short}: Equity IRR {r['irr']*100:.2f}% | NPV Rs. {r['npv']/1e7:.2f} Cr | LCOE Rs. {r['lcoe']:.3f}/kWh")
-    pdf.bul(f"{b_short}: Equity IRR {w['irr']*100:.2f}% | NPV Rs. {w['npv']/1e7:.2f} Cr | LCOE Rs. {w['lcoe']:.3f}/kWh")
-    pdf.bul(f"Equity required - {a_short}: Rs. {r['equity']/1e7:.2f} Cr | {b_short}: Rs. {w['equity']/1e7:.2f} Cr")
-    pdf.bul(f"Both modules achieve payback within {r['payback']} years")
-    gen_diff = ((w['total_gen_kwh'] / r['total_gen_kwh']) - 1) * 100
-    if abs(gen_diff) > 0.5:
-        pdf.bul(f"{b_short} generates {gen_diff:.1f}% {'more' if gen_diff > 0 else 'less'} lifetime energy than {a_short}")
+    for i, name in enumerate(mod_names):
+        r = results[name]
+        label = mod_info[i]["short"] if i < len(mod_info) else name
+        pdf.bul(f"{label}: Equity IRR {r['irr']*100:.2f}% | NPV Rs. {r['npv']/1e7:.2f} Cr | LCOE Rs. {r['lcoe']:.3f}/kWh")
+        pdf.bul(f"  Equity: Rs. {r['equity']/1e7:.2f} Cr | Payback: {r['payback']} years")
+
+    if n_mods >= 2:
+        gen_diff = ((results[mod_names[1]]["total_gen_kwh"] / results[mod_names[0]]["total_gen_kwh"]) - 1) * 100
+        if abs(gen_diff) > 0.5:
+            more_less = "more" if gen_diff > 0 else "less"
+            pdf.bul(f"{mod_names[1]} generates {abs(gen_diff):.1f}% {more_less} lifetime energy than {mod_names[0]}")
 
     pdf.sub_title("Recommendation")
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_text_color(170, 30, 0)
     pdf.multi_cell(0, 4.8,
-        f"Based on comprehensive analysis, {best_name} is RECOMMENDED for investors seeking "
-        f"higher Equity IRR ({best_irr*100:.2f}%). The final decision should align with the "
-        f"investor's return expectations and risk appetite.")
+        f"Based on comprehensive multi-criteria analysis, {best_name} is RECOMMENDED "
+        f"(Weighted Score: {scored[0]['weighted_total']:.1f}/100). "
+        f"The final decision should align with the investor's return expectations and risk appetite.")
     pdf.ln(1)
 
     # =========================================================
@@ -363,32 +406,52 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     # =========================================================
     pdf.stitle("2. Project Details")
 
-    dims_a = info.get("module_a_dims", (None, None))
-    dims_b = info.get("module_b_dims", (None, None))
-    n_a = info.get("module_a_count", r.get("module_count", 0))
-    n_b = info.get("module_b_count", w.get("module_count", 0))
-    mt  = info.get("mounting_type", "Fixed Tilt")
+    mt = info.get("mounting_type", "Fixed Tilt")
 
-    _, _, land_acres_a, land_ha_a = _compute_land_area(dims_a, n_a, mt)
-    _, _, land_acres_b, land_ha_b = _compute_land_area(dims_b, n_b, mt)
-
-    pd_col = _fw(pdf, [2.5, 1.5, 1.5])
+    pd_col = _fw(pdf, [2.5] + [1.5] * n_mods)
+    pd_headers = ["Project Parameter"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+                                           for i in range(n_mods)]
     pd_rows = [
-        ("Customer Name",        info.get("customer_name", ""),         info.get("customer_name", "")),
-        ("Company",              info.get("customer_company", ""),       info.get("customer_company", "")),
-        ("Project DC Capacity",  f"{info.get('plant_capacity','N/A')} MW DC",
-                                  f"{info.get('plant_capacity','N/A')} MW DC"),
-        ("Location",             info.get("location", ""),              info.get("location", "")),
-        ("Module Brand",         info.get("module_a_brand", ""),        info.get("module_b_brand", "")),
-        ("Module Wattage",       f"{info.get('module_a_wp','N/A')} Wp", f"{info.get('module_b_wp','N/A')} Wp"),
-        ("Number of Modules",    f"{n_a:,} nos",                        f"{n_b:,} nos"),
-        ("Mounting Structure",   mt,                                     mt),
-        ("Land Area Required",   f"{land_acres_a:.1f} acres ({land_ha_a:.1f} ha)",
-                                  f"{land_acres_b:.1f} acres ({land_ha_b:.1f} ha)"),
-        ("Analysis Basis",       "Frontside only (no bifacial)",         "Frontside only (no bifacial)"),
-        ("Plant Life",           "25 years",                             "25 years"),
+        ["Customer Name"] + [info.get("customer_name", "")] * n_mods,
+        ["Company"] + [info.get("customer_company", "")] * n_mods,
+        ["Project DC Capacity"] + [f"{info.get('plant_capacity', 'N/A')} MW DC"] * n_mods,
+        ["Location"] + [info.get("location", "")] * n_mods,
     ]
-    pdf.tbl_block(pd_col, ["Project Parameter", a_short, b_short], pd_rows)
+
+    for i, name in enumerate(mod_names):
+        mi = mod_info[i] if i < len(mod_info) else {}
+        pd_rows.append([
+            f"Module Brand ({i+1})",
+            mi.get("brand", name),
+        ] + [""] * (n_mods - 1))
+        r = results[name]
+        pd_rows.append([
+            f"Module Wattage ({i+1})",
+            f"{mi.get('wp', 'N/A')} Wp",
+        ] + [""] * (n_mods - 1))
+        pd_rows.append([
+            f"Module Count ({i+1})",
+            f"{r['module_count']:,} nos",
+        ] + [""] * (n_mods - 1))
+
+        dims = mi.get("dims", (None, None))
+        _, _, land_acres, land_ha = _compute_land_area(dims, r["module_count"], mt)
+        pd_rows.append([
+            f"Land Area ({i+1})",
+            f"{land_acres:.1f} acres ({land_ha:.1f} ha)",
+        ] + [""] * (n_mods - 1))
+
+    pd_rows.append(["Mounting Structure"] + [mt] * n_mods)
+
+    bifacial_detected = info.get("bifacial_detected", False)
+    if bifacial_detected:
+        pd_rows.append(["Analysis Basis"] + [f"Bifacial (albedo={info.get('ground_albedo')}, height={info.get('mounting_height_m')}m)"] * n_mods)
+    else:
+        pd_rows.append(["Analysis Basis"] + ["Frontside only (no bifacial)"] * n_mods)
+
+    pd_rows.append(["Plant Life"] + ["25 years"] * n_mods)
+
+    pdf.tbl_block(pd_col, pd_headers, pd_rows)
     pdf.ln(1)
     gcr = _GCR_LAND_FACTOR.get(mt, 3.0)
     pdf.note(
@@ -401,9 +464,9 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     # =========================================================
     pdf.stitle("3. Project Background")
     pdf.ptext(
-        f"The {info.get('plant_capacity','XX')} MW DC plant is at "
-        f"{info.get('location','the site')} (Lat: {info.get('latitude','N/A')}, "
-        f"Lon: {info.get('longitude','N/A')}). "
+        f"The {info.get('plant_capacity', 'XX')} MW DC plant is at "
+        f"{info.get('location', 'the site')} (Lat: {info.get('latitude', 'N/A')}, "
+        f"Lon: {info.get('longitude', 'N/A')}). "
         f"Configuration: {mounting_display}. DCR-compliant (indigenously manufactured modules required)."
     )
     for param in info.get("project_params", []):
@@ -411,27 +474,47 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.ln(0.5)
 
     pdf.sub_title("Site-Specific CUF Assumptions")
-    pdf.bul(f"{a_short}: {r['cuf']*100:.1f}%")
-    pdf.bul(f"{b_short}: {w['cuf']*100:.1f}% - Superior low-light & temperature performance")
+    for i, name in enumerate(mod_names):
+        r = results[name]
+        label = mod_info[i]["short"] if i < len(mod_info) else name
+        extra = ""
+        if r.get("bifacial") and r.get("bifacial_gain"):
+            extra = f" (incl. bifacial boost: {r['bifacial_gain']['boost_pct']:.1f}%)"
+        pdf.bul(f"{label}: {r['cuf']*100:.1f}%{extra}")
     pdf.ln(1)
 
-    pvsyst_a = r.get("pvsyst", {})
-    pvsyst_b = w.get("pvsyst", {})
-    if pvsyst_a or pvsyst_b:
+    # Energy simulation data
+    first_r = results[mod_names[0]]
+    pvsyst_a = first_r.get("pvsyst", {})
+    weather_summary = info.get("weather_summary", "")
+    if pvsyst_a:
         pdf.sub_title("3.1 Energy Simulation Data")
-        pv_col = _fw(pdf, [2.5, 1.5, 1.5, 1])
+        pv_col = _fw(pdf, [2.5] + [1.5] * n_mods + [1])
+        pv_headers = ["Simulation Parameter"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+                                                  for i in range(n_mods)] + ["Unit"]
+        pv_rows = []
+        pv_rows.append(["Weather Data Source"] +
+                       [info.get("weather_source", "Estimate")] * n_mods + [""])
+        pv_rows.append(["Annual GHI"] +
+                       [str(results[n].get("pvsyst", {}).get("annual_ghi", "N/A")) for n in mod_names] +
+                       ["kWh/m2/yr"])
+        pv_rows.append(["Annual POA Irradiance"] +
+                       [str(results[n].get("pvsyst", {}).get("annual_poa", "N/A")) for n in mod_names] +
+                       ["kWh/m2/yr"])
+        pv_rows.append(["Specific Yield"] +
+                       [str(results[n].get("pvsyst", {}).get("specific_yield", "N/A")) for n in mod_names] +
+                       ["kWh/kWp"])
 
         def _fmt_pr(v):
             return f"{v:.1%}" if isinstance(v, (int, float)) else str(v)
 
-        pv_rows = [
-            ["Annual GHI",            str(pvsyst_a.get("annual_ghi","N/A")),    str(pvsyst_b.get("annual_ghi","N/A")),    "kWh/m2/yr"],
-            ["Annual POA Irradiance",  str(pvsyst_a.get("annual_poa","N/A")),    str(pvsyst_b.get("annual_poa","N/A")),    "kWh/m2/yr"],
-            ["Specific Yield",         str(pvsyst_a.get("specific_yield","N/A")), str(pvsyst_b.get("specific_yield","N/A")), "kWh/kWp"],
-            ["Performance Ratio",      _fmt_pr(pvsyst_a.get("performance_ratio")),_fmt_pr(pvsyst_b.get("performance_ratio")), ""],
-            ["CUF (Capacity Util.)",   f"{r['cuf']*100:.1f}%",                  f"{w['cuf']*100:.1f}%",                   ""],
-        ]
-        pdf.tbl_block(pv_col, ["Simulation Parameter", a_short, b_short, "Unit"], pv_rows)
+        pv_rows.append(["Performance Ratio"] +
+                       [_fmt_pr(results[n].get("pvsyst", {}).get("performance_ratio")) for n in mod_names] +
+                       [""])
+        pv_rows.append(["CUF (Capacity Util.)"] +
+                       [f"{results[n]['cuf']*100:.1f}%" for n in mod_names] +
+                       [""])
+        pdf.tbl_block(pv_col, pv_headers, pv_rows)
         pdf.ln(1)
 
     # =========================================================
@@ -439,10 +522,61 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     # =========================================================
     pdf.stitle("4. Module Technical Specifications")
     pdf.ptext("Specifications extracted directly from manufacturer datasheets.")
-    spec_col = _fw(pdf, [2.5, 1.5, 1.5, 1])
-    spec_rows = info.get("spec_rows", [])
-    pdf.tbl_block(spec_col, ["Parameter", a_short, b_short, "Unit"], spec_rows)
+    spec_col = _fw(pdf, [2.5] + [1.5] * n_mods + [1])
+    spec_headers = ["Parameter"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+                                     for i in range(n_mods)] + ["Unit"]
+
+    spec_rows = []
+    # Build spec rows from results
+    spec_structure = [
+        ("Technology", "tech", ""),
+        ("Efficiency", "efficiency", "%"),
+        ("Temp Coeff Pmax", "temp_coeff", "%/°C"),
+        ("Degradation Y1", "deg_y1", "%"),
+        ("Degradation Annual", "deg_ann", "%"),
+        ("Power Warranty", "warranty_yrs", "years"),
+        ("Price", "price_wp", "Rs./Wp"),
+    ]
+    for label, key, unit in spec_structure:
+        row = [label]
+        for name in mod_names:
+            r = results[name]
+            val = r.get(key)
+            if isinstance(val, float):
+                if key == "temp_coeff":
+                    row.append(f"{val:.3f}")
+                elif key in ("efficiency", "deg_y1"):
+                    row.append(f"{val:.2f}")
+                elif key == "deg_ann":
+                    row.append(f"{val:.2f}")
+                elif key == "price_wp":
+                    row.append(f"Rs.{val:.1f}")
+                elif key == "warranty_yrs":
+                    row.append(str(int(val)))
+                else:
+                    row.append(f"{val}")
+            else:
+                row.append(str(val) if val else "N/A")
+        row.append(unit)
+        spec_rows.append(row)
+
+    pdf.tbl_block(spec_col, spec_headers, spec_rows)
     pdf.ln(1)
+
+    # Bifacial details
+    has_bifacial = any(r.get("bifacial") for r in results.values())
+    if has_bifacial:
+        pdf.sub_title("4.1 Bifacial Analysis")
+        for i, name in enumerate(mod_names):
+            r = results[name]
+            if r.get("bifacial") and r.get("bifacial_gain"):
+                bg = r["bifacial_gain"]
+                label = mod_info[i]["short"] if i < len(mod_info) else name
+                pdf.bul(f"{label}: Bifacial gain {bg['boost_pct']:.1f}% | "
+                        f"Rear irradiance {bg['rear_irradiance_kwh_m2']:.0f} kWh/m²/yr | "
+                        f"View factor {bg['view_factor']:.3f} | "
+                        f"Albedo {bg['albedo']}")
+        pdf.ln(1)
 
     # =========================================================
     # 5. FINANCIAL ANALYSIS & PROJECTIONS
@@ -451,22 +585,24 @@ def generate_report(r, w, project_info, chart_dir, output_path):
 
     # 5.1 CAPEX
     pdf.sub_title("5.1 Capital Expenditure (CAPEX)")
-    pdf.ptext(
-        f"Total project cost: Rs. {r['total_cost']/1e7:.2f} Cr ({a_short}) vs "
-        f"Rs. {w['total_cost']/1e7:.2f} Cr ({b_short}). BoS, EPC and land at Rs. 12/Wp."
-    )
-    cc = _fw(pdf, [2.5, 1.5, 1.5])
-    capex_rows = [
-        ["Module Cost",        f"{r['module_cost']/1e7:.2f}", f"{w['module_cost']/1e7:.2f}"],
-        ["BoS, EPC & Land",    f"{r['bos_cost']/1e7:.2f}",   f"{w['bos_cost']/1e7:.2f}"],
-        ["Total Project Cost", f"{r['total_cost']/1e7:.2f}",  f"{w['total_cost']/1e7:.2f}"],
-        ["Equity @ 30%",       f"{r['equity']/1e7:.2f}",      f"{w['equity']/1e7:.2f}"],
-    ]
-    pdf.tbl_block(cc, ["Cost Component (Rs. Cr)", a_short, b_short],
-                  capex_rows, bold_rows=[2, 3])
+    caps = " vs ".join([f"Rs. {results[n]['total_cost']/1e7:.2f} Cr ({mod_info[i]['short'] if i < len(mod_info) else n})"
+                        for i, n in enumerate(mod_names)])
+    pdf.ptext(f"Total project cost: {caps}.")
+    cc = _fw(pdf, [2.5] + [1.5] * n_mods)
+    cc_headers = ["Cost Component (Rs. Cr)"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+                                                  for i in range(n_mods)]
+    capex_rows = []
+    capex_rows.append(["Module Cost"] +
+                      [f"{results[n]['module_cost']/1e7:.2f}" for n in mod_names])
+    capex_rows.append(["BoS, EPC & Land"] +
+                      [f"{results[n]['bos_cost']/1e7:.2f}" for n in mod_names])
+    capex_rows.append(["Total Project Cost"] +
+                      [f"{results[n]['total_cost']/1e7:.2f}" for n in mod_names])
+    capex_rows.append(["Equity @ 30%"] +
+                      [f"{results[n]['equity']/1e7:.2f}" for n in mod_names])
+    pdf.tbl_block(cc, cc_headers, capex_rows, bold_rows=[2, 3])
     pdf.ln(1)
 
-    # Pie chart  -  small, inline
     pie_path = os.path.join(chart_dir, "chart_cost_pie.png")
     pdf.chart(pie_path,
               caption="Cost breakdown: module cost typically represents 55-65% of total CAPEX.",
@@ -474,13 +610,19 @@ def generate_report(r, w, project_info, chart_dir, output_path):
 
     # 5.2 Energy Generation
     pdf.sub_title("5.2 Energy Generation & Revenue")
-    pvsyst_a = r.get("pvsyst", {})
+    gen_text_parts = []
+    for i, name in enumerate(mod_names):
+        r = results[name]
+        label = mod_info[i]["short"] if i < len(mod_info) else name
+        gen_text_parts.append(f"Year 1: {r['gen_y1_kwh']/1e3:,.0f} MWh ({label})")
+
+    pvsyst_a = first_r.get("pvsyst", {})
     pr_val = pvsyst_a.get("performance_ratio", "N/A")
     pr_str = f"{pr_val:.1%}" if isinstance(pr_val, (int, float)) else str(pr_val)
     pdf.ptext(
-        f"Year 1: {r['gen_y1_kwh']/1e3:,.0f} MWh ({a_short}) vs {w['gen_y1_kwh']/1e3:,.0f} MWh ({b_short}). "
-        f"25-yr totals: {r['total_gen_kwh']/1e6:.1f} GWh vs {w['total_gen_kwh']/1e6:.1f} GWh. "
-        f"GHI {pvsyst_a.get('annual_ghi','N/A')} kWh/m2/yr, POA {pvsyst_a.get('annual_poa','N/A')} kWh/m2/yr, PR {pr_str}."
+        f"{' | '.join(gen_text_parts)}. "
+        f"GHI {pvsyst_a.get('annual_ghi', 'N/A')} kWh/m2/yr, "
+        f"POA {pvsyst_a.get('annual_poa', 'N/A')} kWh/m2/yr, PR {pr_str}."
     )
     gen_path = os.path.join(chart_dir, "chart_gen.png")
     pdf.chart(gen_path,
@@ -490,12 +632,12 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     # 5.3 Cash Flow
     pdf.sub_title("5.3 Cash Flow Analysis & Returns")
     pdf.ptext(
-        f"Model includes revenue, O&M (3% escalation), insurance, debt service (15-yr @ 9%), WDV depreciation, tax 25.17%."
+        "Model includes revenue, O&M (3% escalation), insurance, debt service (15-yr @ 9%), WDV depreciation, tax 25.17%."
     )
 
     fcf_path = os.path.join(chart_dir, "chart_cumulative_fcf.png")
     pdf.chart(fcf_path,
-              caption=f"Cumulative FCF - both modules reach payback by Year {w['payback']}. Post-payback slope reflects ongoing returns.",
+              caption="Cumulative FCF - payback reflects equity recovery timeline. Post-payback slope reflects ongoing returns.",
               w_mm=pdf.w - pdf.l_margin - pdf.r_margin)
 
     dscr_path = os.path.join(chart_dir, "chart_dscr.png")
@@ -518,23 +660,65 @@ def generate_report(r, w, project_info, chart_dir, output_path):
               caption="IRR = annualised return on equity over 25 years. NPV = present value of all cash flows at WACC. Higher is better for both.",
               w_mm=90, center=True)
 
-    cc2 = _fw(pdf, [2.5, 1.5, 1.5])
-    fm_rows = [
-        ("Total Project Cost (Rs. Cr)", f"{r['total_cost']/1e7:.2f}",   f"{w['total_cost']/1e7:.2f}"),
-        ("Equity Required (Rs. Cr)",     f"{r['equity']/1e7:.2f}",       f"{w['equity']/1e7:.2f}"),
-        ("Annual Gen Y1 (MWh)",          f"{r['gen_y1_kwh']/1e3:,.0f}",  f"{w['gen_y1_kwh']/1e3:,.0f}"),
-        ("Total Gen 25yr (GWh)",         f"{r['total_gen_kwh']/1e6:.1f}", f"{w['total_gen_kwh']/1e6:.1f}"),
-        ("CUF Frontside (%)",            f"{r['cuf']*100:.1f}",           f"{w['cuf']*100:.1f}"),
-        ("Revenue Y1 (Rs. Cr)",          f"{r['revenue'][1]/1e7:.2f}",    f"{w['revenue'][1]/1e7:.2f}"),
-        ("Equity IRR (%)",               f"{r['irr']*100:.2f}",           f"{w['irr']*100:.2f}"),
-        ("NPV @ 10% (Rs. Cr)",           f"{r['npv']/1e7:.2f}",           f"{w['npv']/1e7:.2f}"),
-        ("LCOE (Rs./kWh)",               f"{r['lcoe']:.3f}",              f"{w['lcoe']:.3f}"),
-        ("Payback Period (years)",        f"{r['payback']}",               f"{w['payback']}"),
-    ]
+    cc2 = _fw(pdf, [2.5] + [1.5] * n_mods)
+    cc2_headers = ["Financial Metric"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+                                           for i in range(n_mods)]
+    fm_rows = []
+    fm_rows.append(["Total Project Cost (Rs. Cr)"] +
+                   [f"{results[n]['total_cost']/1e7:.2f}" for n in mod_names])
+    fm_rows.append(["Equity Required (Rs. Cr)"] +
+                   [f"{results[n]['equity']/1e7:.2f}" for n in mod_names])
+    fm_rows.append(["Annual Gen Y1 (MWh)"] +
+                   [f"{results[n]['gen_y1_kwh']/1e3:,.0f}" for n in mod_names])
+    fm_rows.append(["Total Gen 25yr (GWh)"] +
+                   [f"{results[n]['total_gen_kwh']/1e6:.1f}" for n in mod_names])
+    fm_rows.append(["CUF (%)"] +
+                   [f"{results[n]['cuf']*100:.1f}" for n in mod_names])
+    fm_rows.append(["Revenue Y1 (Rs. Cr)"] +
+                   [f"{results[n]['revenue'][1]/1e7:.2f}" for n in mod_names])
+    fm_rows.append(["Equity IRR (%)"] +
+                   [f"{results[n]['irr']*100:.2f}" for n in mod_names])
+    fm_rows.append(["NPV @ 10% (Rs. Cr)"] +
+                   [f"{results[n]['npv']/1e7:.2f}" for n in mod_names])
+    fm_rows.append(["LCOE (Rs./kWh)"] +
+                   [f"{results[n]['lcoe']:.3f}" for n in mod_names])
+    fm_rows.append(["Payback Period (years)"] +
+                   [f"{results[n]['payback']}" for n in mod_names])
+
     irr_idx = [i for i, row in enumerate(fm_rows) if "IRR" in row[0] or "NPV" in row[0]]
-    pdf.tbl_block(cc2, ["Financial Metric", a_short, b_short],
-                  fm_rows, bold_rows=irr_idx)
+    pdf.tbl_block(cc2, cc2_headers, fm_rows, bold_rows=irr_idx)
     pdf.ln(1)
+
+    # =========================================================
+    # 6A. MULTI-CRITERIA SCORING
+    # =========================================================
+    if scored:
+        pdf.stitle("6A. Multi-Criteria Scoring")
+        pdf.ptext(
+            "Weighted multi-criteria scoring across 7 dimensions. "
+            "Each criterion is min-max normalized (0-100). Higher total = better investment."
+        )
+
+        # Scoring weights display
+        weights_text = "Weights: " + " | ".join([f"{k}: {v}%" for k, v in scored[0].get("scores", {}).items()])
+        pdf.note(weights_text if len(weights_text) < 200 else "See app for weight configuration.")
+        pdf.ln(1)
+
+        if score_headers and score_rows:
+            sc_col_w = [pw / len(score_headers) * 0.9 for _ in score_headers]
+            sc_col_w[0] = sc_col_w[0] * 1.3
+            diff = sum(sc_col_w) - pw
+            sc_col_w[-1] -= diff
+            pdf.tbl_block(sc_col_w, score_headers, score_rows)
+
+            # Highlight best
+            if scored:
+                pdf.ln(1)
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.set_text_color(0, 80, 0)
+                pdf.multi_cell(0, 4.5,
+                    f"🥇 Highest Ranked: {scored[0]['name']} (Weighted Score: {scored[0]['weighted_total']:.1f}/100)")
+        pdf.ln(1)
 
     # =========================================================
     # 7. RISK ANALYSIS & SENSITIVITY
@@ -542,29 +726,39 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.stitle("7. Risk Analysis & Sensitivity")
 
     risks = [
-        ("PPA Tariff Risk",   "Rs. 0.50/kWh reduction reduces IRR by ~3-4%. Both modules equally exposed."),
-        ("Generation Risk",   "10% lower CUF reduces IRR by ~4-5%. TOPCon temperature coefficient offers marginal protection."),
-        ("Interest Rate Risk", "1% rate increase reduces IRR by ~1.5%. Lower-debt module has slightly better resilience."),
-        ("Degradation Risk",  "Higher degradation impacts long-term returns. N-TOPCon has proven lower annual degradation."),
-        ("Technology Risk",   "PERC is mature; N-TOPCon is next-generation with longer-term upgrade potential."),
-        ("DCR Compliance",    "Both modules are DCR-compliant, mitigating import and policy risks."),
+        ("PPA Tariff Risk",
+         "Rs. 0.50/kWh reduction reduces IRR by ~3-4%. All modules equally exposed."),
+        ("Generation Risk",
+         "10% lower CUF reduces IRR by ~4-5%. Lower temp coeff modules offer marginal protection."),
+        ("Interest Rate Risk",
+         "1% rate increase reduces IRR by ~1.5%. Lower-debt module has slightly better resilience."),
+        ("Degradation Risk",
+         "Higher degradation impacts long-term returns. Lower annual degradation is preferred."),
+        ("Technology Risk",
+         "PERC is mature; N-TOPCon and HJT are next-generation with longer-term upgrade potential."),
+        ("DCR Compliance",
+         "All modules are DCR-compliant, mitigating import and policy risks."),
     ]
     risk_col = _fw(pdf, [1.3, 4.2])
     pdf.tbl_block(risk_col, ["Risk Factor", "Assessment"], risks)
     pdf.ln(1)
 
     pdf.sub_title("7.1 Sensitivity Analysis")
-    price_diff = abs(w["price_wp"] - r["price_wp"])
-    cheaper = a_short if r["price_wp"] <= w["price_wp"] else b_short
+    prices = [results[n]["price_wp"] for n in mod_names]
+    min_price = min(prices)
+    max_price = max(prices)
+    price_diff = max_price - min_price
     if price_diff > 0:
+        cheapest_idx = prices.index(min_price)
+        cheapest = mod_info[cheapest_idx]["short"] if cheapest_idx < len(mod_info) else mod_names[cheapest_idx]
         pdf.ptext(
             f"Module price is the single largest return lever (~3% IRR per Rs. 1/Wp change). "
-            f"{cheaper}'s price advantage of Rs. {price_diff:.1f}/Wp is a key driver of the return differential."
+            f"{cheapest}'s price advantage of Rs. {price_diff:.1f}/Wp is a key driver of return differentials."
         )
     else:
         pdf.ptext(
             "Module price is the single largest return lever (~3% IRR per Rs. 1/Wp change). "
-            "Both modules are priced equally; performance characteristics drive the return differential."
+            "All modules are priced equally; performance characteristics drive return differentials."
         )
 
     # =========================================================
@@ -573,46 +767,80 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.stitle("8. Conclusion & Recommendation")
     pdf.sub_title("8.1 Comparative Assessment")
 
-    # Two-column advantage table
-    adv_col = _fw(pdf, [2, 2])
-    pdf.tbl_hdr(adv_col, [f"Advantages of {a_name}", f"Advantages of {b_name}"])
+    # Advantage comparison - two columns for best vs rest, or show per module
+    if n_mods == 2:
+        adv_col = _fw(pdf, [2, 2])
+        a_name = mod_info[0]["name"] if mod_info else mod_names[0]
+        b_name = mod_info[1]["name"] if len(mod_info) > 1 else mod_names[1]
+        a_short = mod_info[0]["short"] if mod_info else mod_names[0]
+        b_short = mod_info[1]["short"] if len(mod_info) > 1 else mod_names[1]
+        r_a = results[mod_names[0]]
+        r_b = results[mod_names[1]]
 
-    a_adv = [f"Equity IRR: {r['irr']*100:.2f}% vs {w['irr']*100:.2f}%"]
-    if r['total_cost'] < w['total_cost']:
-        a_adv.append(f"Lower project cost: Rs. {r['total_cost']/1e7:.2f} Cr (saves Rs. {(w['total_cost']-r['total_cost'])/1e7:.2f} Cr)")
-    if r['equity'] < w['equity']:
-        a_adv.append(f"Lower equity: Rs. {r['equity']/1e7:.2f} Cr")
-    if r['lcoe'] < w['lcoe']:
-        a_adv.append(f"Lower LCOE: Rs. {r['lcoe']:.3f}/kWh")
-    if r.get("temp_coeff", 0) and w.get("temp_coeff", 0) and r["temp_coeff"] < w["temp_coeff"]:
-        a_adv.append(f"Better temp. coeff.: {r['temp_coeff']:.3f}%/C")
-    if r.get("warranty_yrs", 0) > w.get("warranty_yrs", 0):
-        a_adv.append(f"Longer warranty: {r['warranty_yrs']} yr")
+        pdf.tbl_hdr(adv_col, [f"Advantages of {a_name}", f"Advantages of {b_name}"])
 
-    b_adv = []
-    if w['npv'] > r['npv']:
-        b_adv.append(f"Higher NPV: Rs. {w['npv']/1e7:.2f} Cr")
-    if w['total_gen_kwh'] > r['total_gen_kwh'] * 1.005:
-        b_adv.append(f"More 25-yr generation: {w['total_gen_kwh']/1e6:.1f} GWh")
-    if w.get("deg_ann", 1) < r.get("deg_ann", 1):
-        b_adv.append(f"Lower degradation: {w.get('deg_ann','')}% pa")
-    if w.get("temp_coeff", 0) and r.get("temp_coeff", 0) and w["temp_coeff"] < r["temp_coeff"]:
-        b_adv.append(f"Better temp. coeff.: {w['temp_coeff']:.3f}%/C")
-    if w.get("warranty_yrs", 0) > r.get("warranty_yrs", 0):
-        b_adv.append(f"Longer warranty: {w['warranty_yrs']} yr")
-    if not b_adv:
-        b_adv.append("Comparable performance across all metrics")
+        a_adv = [f"Equity IRR: {r_a['irr']*100:.2f}% vs {r_b['irr']*100:.2f}%"]
+        if r_a["total_cost"] < r_b["total_cost"]:
+            a_adv.append(f"Lower project cost: saves Rs. {(r_b['total_cost']-r_a['total_cost'])/1e7:.2f} Cr")
+        if r_a["equity"] < r_b["equity"]:
+            a_adv.append(f"Lower equity: Rs. {r_a['equity']/1e7:.2f} Cr")
+        if r_a["lcoe"] < r_b["lcoe"]:
+            a_adv.append(f"Lower LCOE: Rs. {r_a['lcoe']:.3f}/kWh")
+        if r_a["temp_coeff"] < r_b["temp_coeff"]:
+            a_adv.append(f"Better temp. coeff.: {r_a['temp_coeff']:.3f}%/C")
+        if r_a["warranty_yrs"] > r_b["warranty_yrs"]:
+            a_adv.append(f"Longer warranty: {r_a['warranty_yrs']} yr")
 
-    max_rows = max(len(a_adv), len(b_adv))
-    a_adv += [""] * (max_rows - len(a_adv))
-    b_adv += [""] * (max_rows - len(b_adv))
-    for i in range(max_rows):
-        pdf.tbl_row(adv_col, [a_adv[i], b_adv[i]], fill=i % 2 == 1)
+        b_adv = []
+        if r_b["npv"] > r_a["npv"]:
+            b_adv.append(f"Higher NPV: Rs. {r_b['npv']/1e7:.2f} Cr")
+        if r_b["total_gen_kwh"] > r_a["total_gen_kwh"] * 1.005:
+            b_adv.append(f"More 25-yr generation: {r_b['total_gen_kwh']/1e6:.1f} GWh")
+        if r_b["deg_ann"] < r_a["deg_ann"]:
+            b_adv.append(f"Lower degradation: {r_b['deg_ann']}% pa")
+        if r_b["temp_coeff"] < r_a["temp_coeff"]:
+            b_adv.append(f"Better temp. coeff.: {r_b['temp_coeff']:.3f}%/C")
+        if r_b["warranty_yrs"] > r_a["warranty_yrs"]:
+            b_adv.append(f"Longer warranty: {r_b['warranty_yrs']} yr")
+        if not b_adv:
+            b_adv.append("Comparable performance across all metrics")
+
+        max_rows = max(len(a_adv), len(b_adv))
+        a_adv += [""] * (max_rows - len(a_adv))
+        b_adv += [""] * (max_rows - len(b_adv))
+        for i in range(max_rows):
+            pdf.tbl_row(adv_col, [a_adv[i], b_adv[i]], fill=i % 2 == 1)
+    else:
+        # For 3+ modules, list each module's strengths
+        adv_col = _fw(pdf, [2] * n_mods)
+        adv_headers = [mod_info[i]["short"] if i < len(mod_info) else mod_names[i] for i in range(n_mods)]
+        pdf.tbl_hdr(adv_col, adv_headers)
+
+        adv_rows = []
+        for i, name in enumerate(mod_names):
+            r = results[name]
+            advs = [f"IRR: {r['irr']*100:.2f}%"]
+            advs.append(f"NPV: Rs.{r['npv']/1e7:.2f} Cr")
+            advs.append(f"LCOE: Rs.{r['lcoe']:.3f}/kWh")
+            if r.get("deg_ann"):
+                advs.append(f"Degr.: {r['deg_ann']}%/yr")
+            if r.get("temp_coeff"):
+                advs.append(f"TC: {r['temp_coeff']:.3f}%/C")
+            if r.get("warranty_yrs"):
+                advs.append(f"Warr.: {r['warranty_yrs']}yr")
+            adv_rows.append(advs)
+
+        max_adv = max(len(a) for a in adv_rows)
+        for i in range(max_adv):
+            row = []
+            for j in range(n_mods):
+                row.append(adv_rows[j][i] if i < len(adv_rows[j]) else "")
+            pdf.tbl_row(adv_col, row, fill=i % 2 == 1)
 
     pdf.ln(3)
-    pdf.sub_title("8.2 Final Recommendation")
 
-    # Green recommendation box
+    # Final recommendation
+    pdf.sub_title("8.2 Final Recommendation")
     pw2 = pdf.w - pdf.l_margin - pdf.r_margin
     y_rec = pdf.get_y()
     box_h = 28
@@ -624,25 +852,30 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.set_xy(pdf.l_margin + 4, y_rec + 3)
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(0, 80, 0)
+
+    score_str = f"Score: {scored[0]['weighted_total']:.1f}/100 | " if scored else ""
     pdf.multi_cell(pw2 - 8, 5.5,
-        f"RECOMMENDATION: {best_name} is recommended based on Equity IRR {best_irr*100:.2f}%, "
-        f"equity Rs. {best_mod['equity']/1e7:.2f} Cr, and LCOE Rs. {best_mod['lcoe']:.2f}/kWh. "
+        f"RECOMMENDATION: {best_name} is recommended based on {score_str}"
+        f"Equity IRR {best_irr*100:.2f}%, "
+        f"equity Rs. {best_r['equity']/1e7:.2f} Cr, and LCOE Rs. {best_r['lcoe']:.2f}/kWh. "
         f"DCR certification ensures bankability and investor confidence.")
     pdf.set_y(y_rec + box_h + 3)
 
     # Note on alternate
     pdf.set_font("Helvetica", "I", 8.5)
     pdf.set_text_color(80, 80, 80)
-    if other_mod["npv"] > best_mod["npv"]:
-        pdf.multi_cell(0, 4.5,
-            f"Note: If maximising total lifetime returns is the priority, {other_name}'s higher NPV "
-            f"(Rs. {other_mod['npv']/1e7:.2f} Cr vs Rs. {best_mod['npv']/1e7:.2f} Cr) makes it a "
-            f"compelling alternative. Decision depends on investor's return requirements and risk appetite.")
-    else:
-        pdf.multi_cell(0, 4.5,
-            f"Note: {best_name} leads on both IRR and NPV. {other_name} may be considered based on "
-            "availability, pricing, or technology preference.")
-
+    if n_mods > 1 and not best_mod_name == mod_names[-1]:
+        alt_name = mod_names[-1]
+        alt_r = results[alt_name]
+        if alt_r["npv"] > best_r["npv"]:
+            pdf.multi_cell(0, 4.5,
+                f"Note: If maximising total lifetime returns is the priority, {alt_name}'s higher NPV "
+                f"(Rs. {alt_r['npv']/1e7:.2f} Cr vs Rs. {best_r['npv']/1e7:.2f} Cr) makes it a "
+                f"compelling alternative.")
+        else:
+            pdf.multi_cell(0, 4.5,
+                f"Note: {best_name} leads on both IRR and NPV. Other modules may be considered based on "
+                "availability, pricing, or technology preference.")
     pdf.ln(3)
 
     # Bankability box
@@ -662,7 +895,7 @@ def generate_report(r, w, project_info, chart_dir, output_path):
     pdf.set_text_color(50, 50, 50)
     pdf.multi_cell(pw2 - 8, 4.3,
         "This project demonstrates strong financial metrics (Min. DSCR > 1.5x, IRR > 35%, payback within 3 years) "
-        "meeting standard project finance lending criteria. Conservative frontside-only assumptions "
+        "meeting standard project finance lending criteria. Conservative assumptions "
         "provide additional comfort to lenders and equity investors.")
 
     pdf.output(output_path)
