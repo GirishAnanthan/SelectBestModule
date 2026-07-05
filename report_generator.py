@@ -112,6 +112,7 @@ class SolarReport(FPDF):
         return max_lines * line_h
 
     def tbl_hdr(self, col_w, headers):
+        self.set_x(self.l_margin)
         self.set_font("Helvetica", "B", 8)
         self.set_fill_color(0, 51, 102)
         self.set_text_color(255, 255, 255)
@@ -123,6 +124,7 @@ class SolarReport(FPDF):
         self.set_xy(x0, y0 + rh)
 
     def tbl_row(self, col_w, cells, bold=False, fill=False):
+        self.set_x(self.l_margin)
         self.set_font("Helvetica", "B" if bold else "", 7.5)
         self.set_text_color(0, 0, 0)
         bg = (220, 230, 245) if fill else (255, 255, 255)
