@@ -192,6 +192,113 @@ def compute_bifacial_gain(albedo, mounting_height_m, tilt_angle, ghi_annual, bif
     }
 
 
+def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors,
+                               gen_y1_kwh, cuf, module_capacity_kw):
+    """Compute monthly generation, PR, and yield from NASA POWER monthly data.
+    Returns list of 12 dicts, one per month.
+    """
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    ghi_monthly = weather_data.get("ALLSKY_SFC_SW_GHI", {}) if weather_data else {}
+    t2m_monthly = weather_data.get("T2M", {}) if weather_data else {}
+
+    ghi_values = [v for v in ghi_monthly.values() if v is not None]
+    total_ghi = sum(ghi_values) if ghi_values else annual_ghi
+
+    monthly_data = []
+    for m_idx in range(12):
+        m_key = list(ghi_monthly.keys())[m_idx] if ghi_monthly and len(ghi_monthly) > m_idx else f"{m_idx+1:02d}"
+        m_ghi = ghi_monthly.get(m_key, annual_ghi / 12) if ghi_monthly else annual_ghi / 12
+        m_temp = t2m_monthly.get(m_key, 25.0) if t2m_monthly else 25.0
+        if m_ghi is None:
+            m_ghi = annual_ghi / 12
+        if m_temp is None:
+            m_temp = 25.0
+
+        ghi_frac = m_ghi / total_ghi if total_ghi > 0 else 1 / 12
+        m_gen = gen_y1_kwh * ghi_frac
+        m_poa = annual_poa * ghi_frac
+        m_pr = (m_gen / (m_poa * module_capacity_kw * 1000)) if (m_poa > 0 and module_capacity_kw > 0) else 0
+        m_sy = m_gen / module_capacity_kw if module_capacity_kw > 0 else 0
+
+        monthly_data.append({
+            "month": months[m_idx],
+            "ghi": round(m_ghi, 1),
+            "poa": round(m_poa, 1),
+            "temp": round(m_temp, 1),
+            "gen_kwh": round(m_gen, 0),
+            "pr": round(m_pr, 3),
+            "specific_yield": round(m_sy, 0),
+        })
+
+    # Annual totals
+    annual_metrics = {
+        "total_gen": round(sum(d["gen_kwh"] for d in monthly_data), 0),
+        "avg_pr": round(sum(d["pr"] for d in monthly_data) / 12, 3),
+        "avg_temp": round(sum(d["temp"] for d in monthly_data) / 12, 1),
+        "total_ghi": round(sum(d["ghi"] for d in monthly_data), 0),
+        "total_poa": round(sum(d["poa"] for d in monthly_data), 0),
+    }
+
+    return monthly_data, annual_metrics
+
+
+def compute_pvsyst_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20, mounting_type="Fixed Tilt"):
+    """Compute PVSyst-style energy loss breakdown.
+    Returns list of (loss_name, loss_pct, cumulative_pct) tuples for waterfall chart,
+    and a dict of individual loss factors.
+    """
+    # Starting from POA irradiance (100%), each loss reduces the energy
+    losses = {}
+
+    # 1. IAM loss (Incidence Angle Modifier) - typical 3% for fixed tilt, 5% for trackers
+    if "Tracker" in mounting_type:
+        losses["IAM"] = 5.0
+    else:
+        losses["IAM"] = 3.0
+
+    # 2. Soiling loss - typical 2% for Indian sites
+    losses["Soiling"] = 2.0
+
+    # 3. Shading / horizon loss - typical 1.5%
+    losses["Shading"] = 1.5
+
+    # 4. Module quality / LID - typical 1.5%
+    losses["Module Quality / LID"] = 1.5
+
+    # 5. Temperature loss - computed from NOCT and ambient temp
+    cell_temp = avg_temp + (noct - 20) / 800 * 800
+    temp_loss = abs(temp_coeff_pmax) * (cell_temp - 25)
+    losses["Temperature"] = round(max(0, temp_loss), 1)
+
+    # 6. Low irradiance loss - typical 2%
+    losses["Low Irradiance"] = 2.0
+
+    # 7. Mismatch loss - typical 1%
+    losses["Mismatch"] = 1.0
+
+    # 8. Ohmic wiring loss - typical 1.5%
+    losses["Ohmic Wiring"] = 1.5
+
+    # 9. Inverter loss - typical 2.5%
+    losses["Inverter"] = 2.5
+
+    # 10. Transformer / grid connection - typical 1%
+    losses["Transformer & Grid"] = 1.0
+
+    # 11. Availability - typical 1.5%
+    losses["Availability"] = 1.5
+
+    # Build cumulative series for waterfall
+    cumulative = 100.0
+    loss_series = []
+    for name, pct in losses.items():
+        cumulative -= pct
+        loss_series.append((name, pct, round(cumulative, 1)))
+
+    return loss_series, losses
+
+
 def get_weather_summary(weather_data):
     """Format weather data summary for report display."""
     if not weather_data:

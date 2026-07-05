@@ -93,32 +93,58 @@ class SolarReport(FPDF):
             self.set_text_color(110, 110, 110)
             self.cell(w - 4, 3, sub)
 
+    def _cell_lines(self, col_w, text):
+        """Estimate number of lines needed to render text in given column width."""
+        if not text:
+            return 1
+        tw = self.get_string_width(str(text))
+        if tw <= col_w - 1:
+            return 1
+        return int(tw / (col_w - 1)) + (1 if tw % (col_w - 1) > 0.5 else 0)
+
+    def _row_h(self, col_w, cells, line_h=4.2):
+        """Calculate row height needed for cells given column widths."""
+        max_lines = 1
+        for i, c in enumerate(cells):
+            nl = self._cell_lines(col_w[i], str(c))
+            if nl > max_lines:
+                max_lines = nl
+        return max_lines * line_h
+
     def tbl_hdr(self, col_w, headers):
         self.set_font("Helvetica", "B", 8)
         self.set_fill_color(0, 51, 102)
         self.set_text_color(255, 255, 255)
+        rh = self._row_h(col_w, headers, 5.0)
+        x0, y0 = self.get_x(), self.get_y()
         for i, h in enumerate(headers):
-            self.cell(col_w[i], 5.5, h, border=1, align="C",
-                      fill=True, new_x="RIGHT", new_y="TOP")
-        self.ln()
+            self.set_xy(x0 + sum(col_w[:i]), y0)
+            self.multi_cell(col_w[i], 5.0, str(h), border=1, align="C", fill=True)
+        self.set_xy(x0, y0 + rh)
 
     def tbl_row(self, col_w, cells, bold=False, fill=False):
         self.set_font("Helvetica", "B" if bold else "", 7.5)
         self.set_text_color(0, 0, 0)
         bg = (220, 230, 245) if fill else (255, 255, 255)
         self.set_fill_color(*bg)
+        rh = self._row_h(col_w, cells, 4.2)
+        x0, y0 = self.get_x(), self.get_y()
+        if y0 + rh > self.h - self.b_margin:
+            self.add_page()
+            x0, y0 = self.get_x(), self.get_y()
         for i, c in enumerate(cells):
-            self.cell(col_w[i], 5, str(c),
-                      border=1, align="L" if i == 0 else "C",
-                      fill=fill or bold, new_x="RIGHT", new_y="TOP")
-        self.ln()
+            self.set_xy(x0 + sum(col_w[:i]), y0)
+            align = "L" if i == 0 else "C"
+            self.multi_cell(col_w[i], 4.2, str(c), border=1, align=align,
+                           fill=fill or bold)
+        self.set_xy(x0, y0 + rh)
 
     def tbl_block(self, col_w, headers, rows, bold_rows=None, alt_fill=True):
         bold_rows = bold_rows or []
-        row_h = 5
-        hdr_h = 5.5
-        total_h = hdr_h + len(rows) * row_h + 2
-        self.need(total_h)
+        row_h = self._row_h(col_w, rows[0]) if rows else 5
+        hdr_h = self._row_h(col_w, headers, 5.0)
+        est_h = hdr_h + len(rows) * row_h + 4
+        self.need(est_h)
         self.tbl_hdr(col_w, headers)
         for i, row in enumerate(rows):
             self.tbl_row(col_w, row,
@@ -519,6 +545,34 @@ def generate_report(results, project_info, chart_dir, output_path):
         pdf.tbl_block(pv_col, pv_headers, pv_rows)
         pdf.ln(1)
 
+        # Monthly generation table (first module as representative)
+        first_mod_name = mod_names[0]
+        first_mod_res = results[first_mod_name]
+        monthly = first_mod_res.get("monthly_data", [])
+        if monthly:
+            pdf.sub_title("3.2 Monthly Generation Breakdown")
+            pdf.ptext(f"Monthly distribution for {first_mod_res.get('name', first_mod_name)}.")
+            pdf.ln(0.5)
+            mon_col = _fw(pdf, [1.0, 1.2, 1.2, 1.0, 1.5, 1.0, 1.2])
+            mon_headers = ["Month", "GHI\n(kWh/m²)", "POA\n(kWh/m²)", "Temp\n(°C)",
+                           "Generation\n(MWh)", "PR", "Yield\n(kWh/kWp)"]
+            pdf.tbl_hdr(mon_col, mon_headers)
+            for m in monthly:
+                pdf.tbl_row(mon_col, [
+                    m["month"], str(m["ghi"]), str(m["poa"]), str(m["temp"]),
+                    f"{m['gen_kwh']/1e3:.1f}", f"{m['pr']:.3f}", str(m["specific_yield"]),
+                ])
+            # Annual totals row
+            pdf.tbl_row(mon_col, [
+                "Annual", f"{first_mod_res.get('pvsyst', {}).get('annual_ghi', ''):.0f}",
+                f"{first_mod_res.get('pvsyst', {}).get('annual_poa', ''):.0f}",
+                f"{first_mod_res.get('annual_metrics', {}).get('avg_temp', ''):.1f}",
+                f"{first_mod_res.get('gen_y1_kwh', 0) / 1e3:.1f}",
+                f"{first_mod_res.get('annual_metrics', {}).get('avg_pr', ''):.3f}",
+                f"{first_mod_res.get('pvsyst', {}).get('specific_yield', ''):.0f}",
+            ], bold=True)
+            pdf.ln(1)
+
     # =========================================================
     # 4. TECHNICAL SPECIFICATIONS
     # =========================================================
@@ -724,9 +778,46 @@ def generate_report(results, project_info, chart_dir, output_path):
         pdf.ln(1)
 
     # =========================================================
-    # 7. RISK ANALYSIS & SENSITIVITY
+    # 7. PVSYST LOSS ANALYSIS
     # =========================================================
-    pdf.stitle("7. Risk Analysis & Sensitivity")
+    pdf.stitle("7. PVSyst-Style Loss Analysis")
+    pdf.ptext(
+        "Detailed energy loss breakdown modeled on PVSyst methodology. "
+        "Losses are applied sequentially from POA irradiance to grid injection."
+    )
+
+    first_mod_name = mod_names[0]
+    first_mod_res = results[first_mod_name]
+    loss_series = first_mod_res.get("loss_series", [])
+
+    if loss_series:
+        pdf.sub_title("7.1 Loss Breakdown")
+        loss_col = _fw(pdf, [2.5, 1.2, 1.5])
+        pdf.tbl_hdr(loss_col, ["Loss Factor", "Loss (%)", "Cumulative (%)"])
+        for name, pct, cum in loss_series:
+            pdf.tbl_row(loss_col, [name, f"{pct:.1f}%", f"{cum:.1f}%"])
+        pdf.ln(1)
+
+        # Normalized production
+        norm_prod = first_mod_res.get("normalized_prod", 0)
+        if norm_prod:
+            pdf.bul(f"Normalized Production: {norm_prod:.2f} kWh/kWp/day")
+            pdf.bul(f"Performance Ratio: {first_mod_res.get('pvsyst', {}).get('performance_ratio', 'N/A'):.1%}")
+            pdf.bul(f"Reference: Typical Crystalline Silicon PV = 3.5-5.5 kWh/kWp/day for most Indian locations")
+        pdf.ln(1)
+
+        # Loss diagram chart
+        pdf.sub_title("7.2 Loss Diagram")
+        loss_chart = os.path.join(chart_dir, "chart_loss_diagram.png")
+        pdf.chart(loss_chart,
+                  caption="Waterfall chart: sequential energy losses from POA irradiance (100%) to grid injection.",
+                  w_mm=pdf.w - pdf.l_margin - pdf.r_margin, center=False)
+        pdf.ln(1)
+
+    # =========================================================
+    # 8. RISK ANALYSIS & SENSITIVITY
+    # =========================================================
+    pdf.stitle("8. Risk Analysis & Sensitivity")
 
     risks = [
         ("PPA Tariff Risk",
@@ -746,7 +837,7 @@ def generate_report(results, project_info, chart_dir, output_path):
     pdf.tbl_block(risk_col, ["Risk Factor", "Assessment"], risks)
     pdf.ln(1)
 
-    pdf.sub_title("7.1 Sensitivity Analysis")
+    pdf.sub_title("8.1 Sensitivity Analysis")
     prices = [results[n]["price_wp"] for n in mod_names]
     min_price = min(prices)
     max_price = max(prices)
@@ -765,10 +856,10 @@ def generate_report(results, project_info, chart_dir, output_path):
         )
 
     # =========================================================
-    # 8. CONCLUSION & RECOMMENDATION
+    # 9. CONCLUSION & RECOMMENDATION
     # =========================================================
-    pdf.stitle("8. Conclusion & Recommendation")
-    pdf.sub_title("8.1 Comparative Assessment")
+    pdf.stitle("9. Conclusion & Recommendation")
+    pdf.sub_title("9.1 Comparative Assessment")
 
     # Advantage comparison - two columns for best vs rest, or show per module
     if n_mods == 2:
@@ -843,7 +934,7 @@ def generate_report(results, project_info, chart_dir, output_path):
     pdf.ln(3)
 
     # Final recommendation
-    pdf.sub_title("8.2 Final Recommendation")
+    pdf.sub_title("9.2 Final Recommendation")
     pw2 = pdf.w - pdf.l_margin - pdf.r_margin
     y_rec = pdf.get_y()
     box_h = 28

@@ -10,6 +10,7 @@ import json, os, logging
 from weather_data import (
     fetch_nasa_power_monthly, compute_annual_solar_metrics,
     adjust_cuf_for_module, compute_bifacial_gain, get_weather_summary,
+    compute_monthly_breakdown, compute_pvsyst_losses,
 )
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,25 @@ def run_analysis(module_list, project_params, chart_dir):
             "optimal_tilt": solar_metrics.get("optimal_tilt"),
         }
 
+        # Monthly generation breakdown
+        module_capacity_kw = actual_kw
+        monthly_data, annual_metrics = compute_monthly_breakdown(
+            weather_data, solar_metrics["annual_ghi"], solar_metrics["annual_poa"],
+            {}, gen_y1_kwh, cuf, module_capacity_kw,
+        )
+
+        # PVSyst loss breakdown
+        loss_series, loss_factors = compute_pvsyst_losses(
+            mod.get("temp_coeff_pmax", -0.35),
+            mod.get("noct", 43),
+            avg_temp, cuf,
+            albedo=ground_albedo,
+            mounting_type=mounting_type,
+        )
+
+        # Normalized production (kWh/kWp/day)
+        normalized_prod = gen_y1_kwh / actual_kw / 365 if actual_kw > 0 else 0
+
         short_name = mod["short"]
         results[short_name] = {
             "capacity_mw": actual_mw,
@@ -231,6 +251,11 @@ def run_analysis(module_list, project_params, chart_dir):
             "bifacial_gain": bifacial_gain,
             "name": mod["name"],
             "weather_summary": get_weather_summary(weather_data),
+            "monthly_data": monthly_data,
+            "annual_metrics": annual_metrics,
+            "loss_series": loss_series,
+            "loss_factors": loss_factors,
+            "normalized_prod": round(normalized_prod, 2),
         }
 
     # Generate charts for N modules
@@ -326,6 +351,15 @@ def generate_charts(results, module_list, project_params, chart_dir):
         "Financial Metric Comparison",
         os.path.join(chart_dir, "chart_irr_npv.png"),
     )
+
+    # Loss diagram waterfall for first module
+    first_mod = results[mod_names[0]]
+    if first_mod.get("loss_series"):
+        charts["chart_loss_diagram.png"] = _make_loss_diagram(
+            first_mod["loss_series"],
+            first_mod["name"],
+            os.path.join(chart_dir, "chart_loss_diagram.png"),
+        )
 
     return charts
 
@@ -555,6 +589,105 @@ def _make_pie_chart(data, labels, title, fn):
         d.rectangle([(lx, ly), (lx + 22, ly + 22)], fill=col)
         d.text((lx + 30, ly + 2), f"{lab}: Rs.{val / 1e7:.1f}Cr ({val / total * 100:.1f}%)", fill=(0, 0, 0), font=lf)
         ly += 40
+    img.save(fn)
+    return fn
+
+
+def _make_loss_diagram(loss_series, module_name, fn):
+    """PVSyst-style waterfall loss diagram from irradiance to grid."""
+    from PIL import Image, ImageDraw, ImageFont
+    W, H = 1000, 500
+    img = Image.new("RGB", (W, H), (255, 255, 255))
+    d = ImageDraw.Draw(img)
+    try:
+        tf = ImageFont.truetype("arial.ttf", 20)
+        lf = ImageFont.truetype("arial.ttf", 14)
+        af = ImageFont.truetype("arial.ttf", 11)
+    except Exception:
+        tf = lf = af = ImageFont.load_default()
+
+    d.text((W // 2 - 250, 8), f"PVSyst-Style Loss Diagram — {module_name}",
+           fill=(0, 0, 0), font=tf)
+
+    ML, MR, MT, MB = 220, 80, 55, 110
+    PW = W - ML - MR
+    PH = H - MT - MB
+
+    # Build waterfall values starting from 100%
+    labels = ["POA\nIrradiance"]
+    values = [100.0]
+    colors = [(46, 204, 113)]
+    for name, pct, cumulative in loss_series:
+        labels.append(name)
+        values.append(pct)
+        colors.append((231, 76, 60))
+    labels.append("Grid\nInjection")
+    final_val = loss_series[-1][2] if loss_series else 100.0
+    values.append(final_val)
+    colors.append((46, 204, 113))
+
+    n = len(values)
+    bar_w = min(40, PW // (n * 2))
+    gap = bar_w // 2
+    total_w = n * (bar_w + gap) - gap
+    sx = ML + (PW - total_w) / 2
+
+    # Y axis
+    y_max = 105
+    y_min = 0
+    y_rng = y_max - y_min
+
+    for i in range(6):
+        vy = y_max - (y_rng * i / 5)
+        py = H - MB - (vy - y_min) / y_rng * PH
+        d.line([(ML, py), (W - MR, py)], fill=(220, 220, 220))
+        d.text((ML - 35, py - 6), f"{vy:.0f}%", fill=(100, 100, 100), font=af)
+
+    d.text((5, MT + PH // 2 - 30), "Energy (% of POA)", fill=(0, 0, 0), font=lf)
+
+    # Draw bars
+    running = 100.0
+    for i in range(n):
+        xc = sx + i * (bar_w + gap)
+        if i == 0:
+            # Starting bar (POA = 100%)
+            h = (values[i] - y_min) / y_rng * PH
+            d.rectangle([(xc, H - MB - h), (xc + bar_w, H - MB)], fill=colors[i])
+        elif i == n - 1:
+            # Final bar (grid injection)
+            h = (values[i] - y_min) / y_rng * PH
+            d.rectangle([(xc, H - MB - h), (xc + bar_w, H - MB)], fill=colors[i])
+        else:
+            # Loss bar: starts from running, goes down by loss_pct
+            loss = values[i]
+            top_val = running
+            bottom_val = running - loss
+            top_y = H - MB - (top_val - y_min) / y_rng * PH
+            bot_y = H - MB - (bottom_val - y_min) / y_rng * PH
+            d.rectangle([(xc, top_y), (xc + bar_w, bot_y)], fill=colors[i])
+            running -= loss
+
+        # Value label
+        val_y = H - MB - (values[i] - y_min) / y_rng * PH if i in (0, n - 1) else top_y
+        d.text((xc + 2, val_y - 18), f"{values[i]:.1f}%", fill=(0, 0, 0), font=af)
+
+        # X axis label
+        label_lines = labels[i].split("\n")
+        for li, ll in enumerate(label_lines):
+            lw = d.textlength(ll, font=af) if hasattr(d, "textlength") else len(ll) * 6
+            d.text((xc + bar_w / 2 - lw / 2, H - MB + 10 + li * 12),
+                   ll, fill=(0, 0, 0), font=af)
+
+    # Connecting lines between bars
+    for i in range(n - 1):
+        x1 = sx + i * (bar_w + gap) + bar_w
+        x2 = sx + (i + 1) * (bar_w + gap)
+        if i == 0:
+            y_line = H - MB - (100 - y_min) / y_rng * PH
+        else:
+            y_line = H - MB - (loss_series[i - 1][2] - y_min) / y_rng * PH
+        d.line([(x1, y_line), (x2, y_line)], fill=(100, 100, 100), width=1)
+
     img.save(fn)
     return fn
 
