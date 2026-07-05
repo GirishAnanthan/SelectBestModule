@@ -195,13 +195,20 @@ def _get_mfr_name(specs, idx, fallback="Module"):
     if specs:
         mfr = specs.get("manufacturer", "")
         if mfr:
-            return mfr
+            return _clean_name(mfr)
     uploaded_widget = st.session_state.get(f"upload_{idx}")
     if uploaded_widget and hasattr(uploaded_widget, "name"):
         mfr = os.path.splitext(uploaded_widget.name)[0]
         if mfr:
-            return mfr
+            return _clean_name(mfr)
     return fallback
+
+def _clean_name(name, max_len=22):
+    """Clean module name for display: replace separators, truncate."""
+    name = name.replace("_", " ").replace("-", " ").replace("  ", " ")
+    if len(name) > max_len:
+        name = name[:max_len].rsplit(" ", 1)[0] if " " in name[:max_len] else name[:max_len]
+    return name.strip()
 
 # ===== GENERATE REPORT =====
 st.markdown("---")
