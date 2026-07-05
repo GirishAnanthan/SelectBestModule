@@ -249,7 +249,7 @@ if uploaded_all:
                 continue
             mfr = _get_mfr_name(specs, i)
             mod_list.append({
-                "name": specs.get("_filename", f"Module {i+1}"),
+                "name": mfr,
                 "short": mfr,
                 "capacity_w": specs["power_wp"],
                 "efficiency_pct": specs.get("efficiency_pct", 21.0),
