@@ -52,6 +52,7 @@ class SolarReport(FPDF):
         self.ln(0.5)
 
     def ptext(self, t, size=8.5):
+        self.set_x(self.l_margin)
         self.set_font("Helvetica", "", size)
         self.set_text_color(40, 40, 40)
         self.multi_cell(0, 4.2, t)
@@ -67,6 +68,7 @@ class SolarReport(FPDF):
         self.set_x(x0)
 
     def note(self, t):
+        self.set_x(self.l_margin)
         self.set_font("Helvetica", "I", 7.5)
         self.set_text_color(110, 110, 110)
         self.multi_cell(0, 3.8, t)
@@ -699,25 +701,26 @@ def generate_report(results, project_info, chart_dir, output_path):
             "Each criterion is min-max normalized (0-100). Higher total = better investment."
         )
 
-        # Scoring weights display
-        weights_text = "Weights: " + " | ".join([f"{k}: {v}%" for k, v in scored[0].get("scores", {}).items()])
-        pdf.note(weights_text if len(weights_text) < 200 else "See app for weight configuration.")
         pdf.ln(1)
 
         if score_headers and score_rows:
-            sc_col_w = [pw / len(score_headers) * 0.9 for _ in score_headers]
-            sc_col_w[0] = sc_col_w[0] * 1.3
-            diff = sum(sc_col_w) - pw
-            sc_col_w[-1] -= diff
+            n_cols = len(score_headers)
+            if n_cols <= 8:
+                sc_col_w = _fw(pdf, [2] + [1] * (n_cols - 1))
+            else:
+                base = max(8, pw // n_cols)
+                sc_col_w = _fw(pdf, [base + 5] + [base] * (n_cols - 1))
             pdf.tbl_block(sc_col_w, score_headers, score_rows)
 
-            # Highlight best
             if scored:
+                pdf.set_x(pdf.l_margin)
                 pdf.ln(1)
                 pdf.set_font("Helvetica", "B", 9)
                 pdf.set_text_color(0, 80, 0)
-                pdf.multi_cell(0, 4.5,
-                    f"🥇 Highest Ranked: {scored[0]['name']} (Weighted Score: {scored[0]['weighted_total']:.1f}/100)")
+                pdf.cell(0, 5,
+                    f"Highest Ranked: {scored[0]['name']} (Score: {scored[0]['weighted_total']:.1f}/100)",
+                    new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(pdf.l_margin)
         pdf.ln(1)
 
     # =========================================================
