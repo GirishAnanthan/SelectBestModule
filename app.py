@@ -65,6 +65,7 @@ with st.sidebar:
     cur = get_currency(code_from_option(currency_option))
     F = make_formatter(cur)
     sym = F["symbol"]
+    currency_code = code_from_option(currency_option)
 
     st.markdown("---")
     st.header("🌤️ Weather Data")
@@ -280,10 +281,11 @@ if _cfg:
     w_warr = _cfg.get("w_warr", w_warr)
     w_price = _cfg.get("w_price", w_price)
     w_tc = _cfg.get("w_tc", w_tc)
-    _cfg_cur = get_currency(_cfg.get("currency_code", cur["code"]))
-    cur = _cfg_cur
-    F = make_formatter(cur)
+    _cfg_cur = get_currency(_cfg.get("currency_code", currency_code))
+    # Keep original cur (with "code" key); just update formatter and code
+    F = make_formatter(_cfg_cur)
     sym = F["symbol"]
+    currency_code = _cfg.get("currency_code", currency_code)
     for _i, _cm in enumerate(_cfg.get("modules", [])):
         if _i < len(module_specs_list) and module_specs_list[_i] is not None:
             module_specs_list[_i]["price_per_wp"] = _cm.get(
@@ -702,7 +704,7 @@ if uploaded_all:
                 "interest_rate": interest_rate, "loan_tenure": loan_tenure, "discount_rate": discount_rate,
                 "bos_cost": bos_cost, "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
                 "mounting_type": mounting_type, "tilt_angle": tilt_angle,
-                "currency_code": cur["code"],
+                "currency_code": currency_code,
                 "w_lcoe": w_lcoe, "w_irr": w_irr, "w_gen": w_gen, "w_deg": w_deg,
                 "w_warr": w_warr, "w_price": w_price, "w_tc": w_tc,
                 "modules": [
