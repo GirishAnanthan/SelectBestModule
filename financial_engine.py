@@ -6,6 +6,10 @@ Integrates with weather_data.py for NASA POWER API and scoring.py for rankings.
 import numpy as np
 import numpy_financial as npf
 import json, os, logging
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 
 from weather_data import (
     fetch_nasa_power_monthly, compute_annual_solar_metrics,
@@ -25,7 +29,7 @@ CHART_COLORS = [
 ]
 
 
-def run_analysis(module_list, project_params, chart_dir):
+def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip_charts=False):
     """Run complete financial analysis for N module types.
 
     Args:
@@ -40,6 +44,7 @@ def run_analysis(module_list, project_params, chart_dir):
             mounting_type, tilt_angle,
             [weather_source], [ground_albedo], [mounting_height_m]
         chart_dir: directory to save charts
+        weather_data: optional pre-fetched NASA POWER data (avoids re-fetch)
 
     Returns:
         (results dict keyed by module short name, chart paths dict)
@@ -51,11 +56,11 @@ def run_analysis(module_list, project_params, chart_dir):
     lat = project_params["latitude"]
     lon = project_params["longitude"]
     weather_source = project_params.get("weather_source", "api")
-    weather_data = None
     solar_metrics = None
 
-    if weather_source == "api":
+    if weather_source == "api" and weather_data is None:
         weather_data = fetch_nasa_power_monthly(lat, lon)
+    if weather_data is not None:
         solar_metrics = compute_annual_solar_metrics(
             lat, lon, weather_data,
             project_params.get("mounting_type", "Fixed Tilt"),
@@ -134,13 +139,14 @@ def run_analysis(module_list, project_params, chart_dir):
         fcf_arr = [-equity]
 
         bal = debt
+        tariff_esc = project_params.get("tariff_esc", 0.0)
         for yr in range(1, 26):
             dg = 1 - mod["deg_y1_pct"] / 100
             if yr > 1:
                 dg *= (1 - mod["deg_annual_pct"] / 100) ** (yr - 1)
 
             gen_kwh = gen_y1_kwh * dg
-            rev = gen_kwh * project_params["ppa_tariff"]
+            rev = gen_kwh * project_params["ppa_tariff"] * (1 + tariff_esc) ** (yr - 1)
 
             om = project_params["om_per_mw"] * actual_mw * (1 + project_params["om_esc"]) ** (yr - 1)
             ins = total_cost * project_params["insurance_rate"]
@@ -174,7 +180,11 @@ def run_analysis(module_list, project_params, chart_dir):
         ])
 
         irr = npf.irr(fcf_arr)
+        if irr is None or (isinstance(irr, float) and np.isnan(irr)):
+            irr = 0.0
         npv = npf.npv(project_params["discount_rate"], fcf_arr)
+        if npv is None or (isinstance(npv, float) and np.isnan(npv)):
+            npv = 0.0
         lcoe = total_cost / total_gen
 
         cum = 0
@@ -208,6 +218,7 @@ def run_analysis(module_list, project_params, chart_dir):
             avg_temp, cuf,
             albedo=ground_albedo,
             mounting_type=mounting_type,
+            ghi_avg=ghi_avg,
         )
 
         # Normalized production (kWh/kWp/day)
@@ -259,7 +270,10 @@ def run_analysis(module_list, project_params, chart_dir):
         }
 
     # Generate charts for N modules
-    chart_paths = generate_charts(results, module_list, project_params, chart_dir)
+    chart_paths = {}
+    if not skip_charts:
+        currency = project_params.get("currency")
+        chart_paths = generate_charts(results, module_list, project_params, chart_dir, currency=currency)
 
     return results, chart_paths
 
@@ -268,10 +282,19 @@ def run_analysis(module_list, project_params, chart_dir):
 # Chart generation
 # ---------------------------------------------------------------------------
 
-def generate_charts(results, module_list, project_params, chart_dir):
+_PLOT_BG = (1.0, 1.0, 1.0)
+
+
+def _hex(color_tuple):
+    return "#%02x%02x%02x" % color_tuple
+
+
+def generate_charts(results, module_list, project_params, chart_dir, currency=None):
     """Generate comparison charts for N modules. Returns dict of chart paths."""
     mod_names = [m["short"] for m in module_list]
-    colors = CHART_COLORS[:len(mod_names)]
+    colors = [_hex(c) for c in CHART_COLORS[:len(mod_names)]]
+    cur = currency or {"symbol": "Rs.", "rate": 1.0, "unit": "Cr", "div": 1e7}
+    sym, rate, unit, div = cur["symbol"], cur["rate"], cur["unit"], cur["div"]
 
     series = []
     for name in mod_names:
@@ -302,8 +325,8 @@ def generate_charts(results, module_list, project_params, chart_dir):
         [s["cum_fcf"] for s in series],
         [s["name"] for s in series],
         [s["color"] for s in series],
-        "Cumulative Free Cash Flow to Equity (Rs. Crores)",
-        "Cumulative FCF (Rs. Cr)",
+        "Cumulative Free Cash Flow to Equity",
+        f"Cumulative FCF ({sym} {unit})",
         os.path.join(chart_dir, "chart_cumulative_fcf.png"),
     )
 
@@ -316,12 +339,12 @@ def generate_charts(results, module_list, project_params, chart_dir):
         os.path.join(chart_dir, "chart_gen.png"),
     )
 
-    charts["chart_net_income.png"] = _make_ts_bar_chart(
-        [s["ni"][1:] for s in series],
+    charts["chart_net_income.png"] = _make_ts_chart(
+        [s["ni"] for s in series],
         [s["name"] for s in series],
         [s["color"] for s in series],
-        "Annual Net Income After Tax (Rs. Crores)",
-        "Net Income (Rs. Cr)",
+        "Annual Net Income After Tax",
+        f"Net Income ({sym} {unit})",
         os.path.join(chart_dir, "chart_net_income.png"),
     )
 
@@ -338,357 +361,138 @@ def generate_charts(results, module_list, project_params, chart_dir):
     charts["chart_cost_pie.png"] = _make_pie_chart(
         [first["module_cost"], first["bos_cost"]],
         ["Module Cost", "BoS, EPC & Land"],
-        f"Project Cost Breakdown (Total Rs. {first['total_cost'] / 1e7:.1f}Cr)",
+        f"Project Cost Breakdown (Total {sym} {first['total_cost'] / rate / div:.1f}{unit})",
         os.path.join(chart_dir, "chart_cost_pie.png"),
+        sym, rate, div, cur["unit"],
     )
 
     irr_vals = [results[n]["irr"] * 100 for n in mod_names]
-    npv_vals = [results[n]["npv"] / 1e7 for n in mod_names]
+    npv_vals = [results[n]["npv"] / rate / div for n in mod_names]
     charts["chart_irr_npv.png"] = _make_grouped_bar_chart(
         irr_vals, npv_vals,
         mod_names, [s["color"] for s in series],
-        ["Equity IRR (%)", "NPV @ 10% (Rs.Cr)"],
+        [f"Equity IRR (%)", f"NPV ({sym} {unit})"],
         "Financial Metric Comparison",
         os.path.join(chart_dir, "chart_irr_npv.png"),
     )
 
-    # Loss diagram waterfall for first module
-    first_mod = results[mod_names[0]]
-    if first_mod.get("loss_series"):
-        charts["chart_loss_diagram.png"] = _make_loss_diagram(
-            first_mod["loss_series"],
-            first_mod["name"],
-            os.path.join(chart_dir, "chart_loss_diagram.png"),
-        )
+    # Loss diagram waterfall for each module (first kept for backwards-compat path)
+    for name in mod_names:
+        mod_res = results[name]
+        if mod_res.get("loss_series"):
+            charts[f"chart_loss_diagram_{name}.png"] = _make_loss_diagram(
+                mod_res["loss_series"],
+                mod_res["name"],
+                os.path.join(chart_dir, f"chart_loss_diagram_{name}.png"),
+            )
+    if results[mod_names[0]].get("loss_series"):
+        charts["chart_loss_diagram.png"] = charts[f"chart_loss_diagram_{mod_names[0]}.png"]
 
     return charts
 
 
+def _style_axes(ax):
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.set_facecolor(_PLOT_BG)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+
+
 def _make_ts_chart(data_list, names, colors, title, ylabel, fn):
-    """Time series line chart for N data series."""
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = 1000, 350
-    img = Image.new("RGB", (W, H), (255, 255, 255))
-    d = ImageDraw.Draw(img)
-    try:
-        tf = ImageFont.truetype("arial.ttf", 22)
-        lf = ImageFont.truetype("arial.ttf", 16)
-        af = ImageFont.truetype("arial.ttf", 13)
-    except Exception:
-        tf = lf = af = ImageFont.load_default()
-
-    d.text((W // 2 - 250, 10), title, fill=(0, 0, 0), font=tf)
-    ML, MR, MT, MB = 110, 60, 60, 80
-    CW = W - ML - MR
-    CH_ = H - MT - MB
-
-    all_v = []
-    for data in data_list:
-        all_v.extend(data[1:])
-    ymin = min(all_v) * 0.95 if min(all_v) > 0 else 0
-    ymax = max(all_v) * 1.05
-    yrng = max(ymax - ymin, 0.001)
+    """Time series line chart for N data series (matplotlib)."""
+    fig, ax = plt.subplots(figsize=(10, 3.5), dpi=100)
     n_pts = len(data_list[0]) - 1
-
-    for i in range(5):
-        vy = ymin + yrng * i / 4
-        py = H - MB - (vy - ymin) / yrng * CH_
-        d.line([(ML, py), (W - MR, py)], fill=(220, 220, 220))
-        label = f"{vy / 1e7:.1f}" if ylabel != "DSCR (x)" else f"{vy:.2f}"
-        d.text((3, py - 8), label, fill=(100, 100, 100), font=af)
-
-    step = max(1, n_pts // 10)
-    for yr in range(1, n_pts + 1):
-        if yr % step == 0 or yr == 1 or yr == n_pts:
-            px = ML + (yr - 1) / (n_pts - 1) * CW
-            d.line([(px, H - MB), (px, H - MB + 5)], fill=(100, 100, 100))
-            d.text((px - 8, H - MB + 8), str(yr), fill=(100, 100, 100), font=af)
-
-    d.text((ML + CW // 2 - 30, H - 30), "Year", fill=(0, 0, 0), font=lf)
-    d.text((5, MT + CH_ // 2 - 40), ylabel, fill=(0, 0, 0), font=lf)
-
+    years = list(range(1, n_pts + 1))
     for idx, data in enumerate(data_list):
-        c = colors[idx]
-        pts = []
-        for i, val in enumerate(data):
-            if i == 0:
-                continue
-            x = ML + (i - 1) / (n_pts - 1) * CW
-            y = H - MB - (val - ymin) / yrng * CH_
-            pts.append((x, y))
-        for i in range(len(pts) - 1):
-            d.line([pts[i], pts[i + 1]], fill=c, width=3)
-        for pt in pts:
-            d.ellipse([pt[0] - 4, pt[1] - 4, pt[0] + 4, pt[1] + 4], fill=c)
-
-    x_leg = ML
-    for idx, name in enumerate(names):
-        c = colors[idx]
-        d.rectangle([(x_leg, H - 30), (x_leg + 14, H - 15)], fill=c)
-        d.text((x_leg + 20, H - 33), name, fill=(0, 0, 0), font=lf)
-        x_leg += 120
-
-    img.save(fn)
-    return fn
-
-
-def _make_ts_bar_chart(data_list, names, colors, title, ylabel, fn):
-    """Grouped bar chart for N time series (e.g. net income)."""
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = 1000, 350
-    img = Image.new("RGB", (W, H), (255, 255, 255))
-    d = ImageDraw.Draw(img)
-    try:
-        tf = ImageFont.truetype("arial.ttf", 22)
-        lf = ImageFont.truetype("arial.ttf", 16)
-        af = ImageFont.truetype("arial.ttf", 13)
-    except Exception:
-        tf = lf = af = ImageFont.load_default()
-
-    d.text((W // 2 - 250, 10), title, fill=(0, 0, 0), font=tf)
-    ML, MR, MT, MB = 110, 60, 60, 80
-    PW = W - ML - MR
-    PH = H - MT - MB
-
-    all_v = []
-    for data in data_list:
-        all_v.extend(data)
-    ymin = min(0, min(all_v)) * 1.1
-    ymax = max(all_v) * 1.15 if max(all_v) > 0 else 1
-    yrng = max(ymax - ymin, 0.001)
-    n = len(data_list[0])
-    n_mods = len(data_list)
-
-    for i in range(5):
-        vy = ymin + yrng * i / 4
-        py = H - MB - (vy - ymin) / yrng * PH
-        d.line([(ML, py), (W - MR, py)], fill=(220, 220, 220))
-        d.text((3, py - 8), f"{vy:.1f}", fill=(100, 100, 100), font=af)
-
-    zero_y = H - MB - (0 - ymin) / yrng * PH
-    d.line([(ML, zero_y), (W - MR, zero_y)], fill=(80, 80, 80), width=2)
-
-    bw = max(4, min(12, PW // (n * (n_mods + 1))))
-    gap = max(1, bw // 3)
-    gw = n_mods * bw + gap
-    total_w = n * gw
-    sx = ML + (PW - total_w) / 2
-
-    step = max(1, n // 12)
-    for i in range(n):
-        xc = sx + i * gw
-        yr_label = i + 1
-        if yr_label % step == 0 or yr_label == 1 or yr_label == n:
-            cx = xc + n_mods * bw / 2
-            d.line([(cx, H - MB), (cx, H - MB + 5)], fill=(100, 100, 100))
-            d.text((cx - 8, H - MB + 8), str(yr_label), fill=(100, 100, 100), font=af)
-
-        for mod_idx in range(n_mods):
-            val = data_list[mod_idx][i]
-            offset = mod_idx * (bw + gap // max(1, n_mods - 1))
-            val_y = H - MB - (val - ymin) / yrng * PH
-            if val >= 0:
-                d.rectangle([(xc + offset, val_y), (xc + offset + bw, zero_y)], fill=colors[mod_idx])
-            else:
-                d.rectangle([(xc + offset, zero_y), (xc + offset + bw, val_y)], fill=colors[mod_idx])
-
-    d.text((ML + PW // 2 - 30, H - 30), "Year", fill=(0, 0, 0), font=lf)
-    d.text((5, MT + PH // 2 - 40), ylabel, fill=(0, 0, 0), font=lf)
-
-    x_leg = ML
-    for idx, name in enumerate(names):
-        d.rectangle([(x_leg, H - 30), (x_leg + 14, H - 15)], fill=colors[idx])
-        d.text((x_leg + 20, H - 33), name, fill=(0, 0, 0), font=lf)
-        x_leg += 120
-
-    img.save(fn)
+        ax.plot(years, data[1:], color=colors[idx], linewidth=2, label=names[idx], marker="o", markersize=3)
+    _style_axes(ax)
+    ax.set_title(title, fontsize=12, fontweight="bold", color="#003366")
+    ax.set_xlabel("Year", fontsize=10)
+    ax.set_ylabel(ylabel, fontsize=10)
+    ax.legend(loc="best", fontsize=8, frameon=False)
+    fig.tight_layout()
+    fig.savefig(fn, facecolor="white")
+    plt.close(fig)
     return fn
 
 
 def _make_grouped_bar_chart(group1_vals, group2_vals, names, colors, labels, title, fn):
     """Grouped bar chart with two metric groups (e.g. IRR and NPV)."""
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = 800, 600
-    img = Image.new("RGB", (W, H), (255, 255, 255))
-    d = ImageDraw.Draw(img)
-    try:
-        tf = ImageFont.truetype("arial.ttf", 20)
-        lf = ImageFont.truetype("arial.ttf", 14)
-        af = ImageFont.truetype("arial.ttf", 12)
-    except Exception:
-        tf = lf = af = ImageFont.load_default()
-
-    d.text((W // 2 - 200, 10), title, fill=(0, 0, 0), font=tf)
-    ML, MR, MT, MB = 110, 50, 55, 100
-    CW_ = W - ML - MR
-    CH_ = H - MT - MB
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
     n_mods = len(names)
-
-    all_v = group1_vals + group2_vals
-    mx = max(all_v) * 1.2 if max(all_v) > 0 else 1
-    mn = min(0, min(all_v))
-
-    n_groups = 2
-    bw = min(35, CW_ // (n_groups * (n_mods + 1)))
-    gap = max(2, bw // 2)
-    gw = n_mods * bw + gap
-    total_w = n_groups * gw
-    sx = ML + (CW_ - total_w) / 2
-
-    for i in range(5):
-        vy = mn + (mx - mn) * i / 4
-        py = H - MB - (vy - mn) / (mx - mn) * CH_
-        d.line([(ML, py), (W - MR, py)], fill=(220, 220, 220))
-        d.text((5, py - 8), f"{vy:.1f}", fill=(100, 100, 100), font=af)
-
-    for g_idx, vals in enumerate([group1_vals, group2_vals]):
-        xc = sx + g_idx * gw
-        for m_idx in range(n_mods):
-            offset = m_idx * (bw + gap // max(1, n_mods - 1))
-            h_bar = (vals[m_idx] - mn) / (mx - mn) * CH_
-            d.rectangle(
-                [(xc + offset, H - MB - h_bar), (xc + offset + bw, H - MB)],
-                fill=colors[m_idx],
-            )
-        d.text((xc - 15 + n_mods * bw / 2, H - MB + 8), labels[g_idx], fill=(0, 0, 0), font=af)
-
-    x_leg = ML
-    for idx, name in enumerate(names):
-        d.rectangle([(x_leg, H - 30), (x_leg + 14, H - 15)], fill=colors[idx])
-        d.text((x_leg + 20, H - 33), name, fill=(0, 0, 0), font=lf)
-        x_leg += 120
-
-    img.save(fn)
+    x = np.arange(n_mods)
+    width = 0.35
+    ax.bar(x - width / 2, group1_vals, width, label=labels[0], color=colors, alpha=0.85)
+    ax.bar(x + width / 2, group2_vals, width, label=labels[1], color="#e67e22", alpha=0.85)
+    _style_axes(ax)
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, fontsize=9)
+    ax.set_title(title, fontsize=12, fontweight="bold", color="#003366")
+    ax.legend(fontsize=9, frameon=False)
+    for i, v in enumerate(group1_vals):
+        ax.text(i - width / 2, v, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+    for i, v in enumerate(group2_vals):
+        ax.text(i + width / 2, v, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+    fig.tight_layout()
+    fig.savefig(fn, facecolor="white")
+    plt.close(fig)
     return fn
 
 
-def _make_pie_chart(data, labels, title, fn):
-    """Pie chart (unchanged, shows first module cost breakdown)."""
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = 800, 650
-    img = Image.new("RGB", (W, H), (255, 255, 255))
-    d = ImageDraw.Draw(img)
-    try:
-        tf = ImageFont.truetype("arial.ttf", 20)
-        lf = ImageFont.truetype("arial.ttf", 16)
-    except Exception:
-        tf = lf = ImageFont.load_default()
-
-    d.text((W // 2 - 200, 10), title, fill=(0, 0, 0), font=tf)
+def _make_pie_chart(data, labels, title, fn, sym, rate, div, unit="Cr"):
+    """Pie chart of cost breakdown for the first module."""
+    fig, ax = plt.subplots(figsize=(8, 6.5), dpi=100)
+    palette = ["#3498db", "#2ecc71"]
     total = sum(data)
-    cx, cy, r = 250, 350, 180
-    sa = 0
-    palette = [(52, 152, 219), (46, 204, 113)]
-    for val, col in zip(data, palette):
-        ang = 360 * val / total
-        ea = sa + ang
-        d.pieslice([cx - r, cy - r, cx + r, cy + r], sa, ea, fill=col, outline=(255, 255, 255))
-        sa = ea
-    lx, ly = 480, 180
-    for lab, col, val in zip(labels, palette, data):
-        d.rectangle([(lx, ly), (lx + 22, ly + 22)], fill=col)
-        d.text((lx + 30, ly + 2), f"{lab}: Rs.{val / 1e7:.1f}Cr ({val / total * 100:.1f}%)", fill=(0, 0, 0), font=lf)
-        ly += 40
-    img.save(fn)
+    wedges, _, _ = ax.pie(data, labels=None, colors=palette, startangle=90,
+                         autopct=lambda p: f"{p:.1f}%", textprops={"fontsize": 9})
+    ax.set_title(title, fontsize=12, fontweight="bold", color="#003366")
+    leg = [f"{lab}: {sym} {v / rate / div:.1f}{unit} ({v / total * 100:.1f}%)"
+           for lab, v in zip(labels, data)]
+    ax.legend(wedges, leg, loc="center left", bbox_to_anchor=(0.95, 0.5), fontsize=9, frameon=False)
+    fig.tight_layout()
+    fig.savefig(fn, facecolor="white", bbox_inches="tight")
+    plt.close(fig)
     return fn
 
 
 def _make_loss_diagram(loss_series, module_name, fn):
-    """PVSyst-style waterfall loss diagram from irradiance to grid."""
-    from PIL import Image, ImageDraw, ImageFont
-    W, H = 1000, 500
-    img = Image.new("RGB", (W, H), (255, 255, 255))
-    d = ImageDraw.Draw(img)
-    try:
-        tf = ImageFont.truetype("arial.ttf", 20)
-        lf = ImageFont.truetype("arial.ttf", 14)
-        af = ImageFont.truetype("arial.ttf", 11)
-    except Exception:
-        tf = lf = af = ImageFont.load_default()
-
-    d.text((W // 2 - 250, 8), f"PVSyst-Style Loss Diagram — {module_name}",
-           fill=(0, 0, 0), font=tf)
-
-    ML, MR, MT, MB = 220, 80, 55, 110
-    PW = W - ML - MR
-    PH = H - MT - MB
-
-    # Build waterfall values starting from 100%
+    """PVSyst-style waterfall loss diagram from irradiance to grid (matplotlib)."""
     labels = ["POA\nIrradiance"]
     values = [100.0]
-    colors = [(46, 204, 113)]
     for name, pct, cumulative in loss_series:
         labels.append(name)
         values.append(pct)
-        colors.append((231, 76, 60))
     labels.append("Grid\nInjection")
     final_val = loss_series[-1][2] if loss_series else 100.0
     values.append(final_val)
-    colors.append((46, 204, 113))
 
     n = len(values)
-    bar_w = min(40, PW // (n * 2))
-    gap = bar_w // 2
-    total_w = n * (bar_w + gap) - gap
-    sx = ML + (PW - total_w) / 2
-
-    # Y axis
-    y_max = 105
-    y_min = 0
-    y_rng = y_max - y_min
-
-    for i in range(6):
-        vy = y_max - (y_rng * i / 5)
-        py = H - MB - (vy - y_min) / y_rng * PH
-        d.line([(ML, py), (W - MR, py)], fill=(220, 220, 220))
-        d.text((ML - 35, py - 6), f"{vy:.0f}%", fill=(100, 100, 100), font=af)
-
-    d.text((5, MT + PH // 2 - 30), "Energy (% of POA)", fill=(0, 0, 0), font=lf)
-
-    # Draw bars
+    fig, ax = plt.subplots(figsize=(10, 5), dpi=100)
     running = 100.0
     for i in range(n):
-        xc = sx + i * (bar_w + gap)
         if i == 0:
-            # Starting bar (POA = 100%)
-            h = (values[i] - y_min) / y_rng * PH
-            d.rectangle([(xc, H - MB - h), (xc + bar_w, H - MB)], fill=colors[i])
+            ax.bar(i, values[i], color="#2ecc71", edgecolor="white")
         elif i == n - 1:
-            # Final bar (grid injection)
-            h = (values[i] - y_min) / y_rng * PH
-            d.rectangle([(xc, H - MB - h), (xc + bar_w, H - MB)], fill=colors[i])
+            ax.bar(i, values[i], color="#2ecc71", edgecolor="white")
         else:
-            # Loss bar: starts from running, goes down by loss_pct
-            loss = values[i]
-            top_val = running
-            bottom_val = running - loss
-            top_y = H - MB - (top_val - y_min) / y_rng * PH
-            bot_y = H - MB - (bottom_val - y_min) / y_rng * PH
-            d.rectangle([(xc, top_y), (xc + bar_w, bot_y)], fill=colors[i])
-            running -= loss
-
-        # Value label
-        val_y = H - MB - (values[i] - y_min) / y_rng * PH if i in (0, n - 1) else top_y
-        d.text((xc + 2, val_y - 18), f"{values[i]:.1f}%", fill=(0, 0, 0), font=af)
-
-        # X axis label
-        label_lines = labels[i].split("\n")
-        for li, ll in enumerate(label_lines):
-            lw = d.textlength(ll, font=af) if hasattr(d, "textlength") else len(ll) * 6
-            d.text((xc + bar_w / 2 - lw / 2, H - MB + 10 + li * 12),
-                   ll, fill=(0, 0, 0), font=af)
-
-    # Connecting lines between bars
-    for i in range(n - 1):
-        x1 = sx + i * (bar_w + gap) + bar_w
-        x2 = sx + (i + 1) * (bar_w + gap)
-        if i == 0:
-            y_line = H - MB - (100 - y_min) / y_rng * PH
-        else:
-            y_line = H - MB - (loss_series[i - 1][2] - y_min) / y_rng * PH
-        d.line([(x1, y_line), (x2, y_line)], fill=(100, 100, 100), width=1)
-
-    img.save(fn)
+            ax.bar(i, values[i], bottom=running - values[i], color="#e74c3c", edgecolor="white")
+            running -= values[i]
+        # connector line
+        if i < n - 1:
+            y_prev = 100.0 if i == 0 else loss_series[i - 1][2]
+            ax.plot([i, i + 1], [y_prev, y_prev], color="gray", linewidth=1, linestyle="--")
+    ax.set_xticks(range(n))
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_ylabel("Energy (% of POA)", fontsize=10)
+    ax.set_ylim(0, 108)
+    ax.set_title(f"PVSyst-Style Loss Diagram — {module_name}", fontsize=12, fontweight="bold", color="#003366")
+    _style_axes(ax)
+    ax.grid(axis="x", visible=False)
+    fig.tight_layout()
+    fig.savefig(fn, facecolor="white")
+    plt.close(fig)
     return fn
 
 

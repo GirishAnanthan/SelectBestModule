@@ -243,7 +243,8 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
     return monthly_data, annual_metrics
 
 
-def compute_pvsyst_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20, mounting_type="Fixed Tilt"):
+def compute_pvsyst_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20,
+                           mounting_type="Fixed Tilt", ghi_avg=5.5):
     """Compute PVSyst-style energy loss breakdown.
     Returns list of (loss_name, loss_pct, cumulative_pct) tuples for waterfall chart,
     and a dict of individual loss factors.
@@ -266,8 +267,8 @@ def compute_pvsyst_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20, mou
     # 4. Module quality / LID - typical 1.5%
     losses["Module Quality / LID"] = 1.5
 
-    # 5. Temperature loss - computed from NOCT and ambient temp
-    cell_temp = avg_temp + (noct - 20) / 800 * 800
+    # 5. Temperature loss - computed from NOCT, ambient temp and irradiance
+    cell_temp = avg_temp + (noct - 20) / 800 * (ghi_avg * 1000)
     temp_loss = abs(temp_coeff_pmax) * (cell_temp - 25)
     losses["Temperature"] = round(max(0, temp_loss), 1)
 

@@ -4,6 +4,7 @@ PDF Report Generator - Professional compact layout for N-module comparison.
 import os
 from fpdf import FPDF
 from PIL import Image
+from currency import make_formatter
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +223,14 @@ def _fw(pdf, splits):
 
 def generate_report(results, project_info, chart_dir, output_path):
     info = project_info
+    cur = info.get("currency") or {"code": "INR", "symbol": "Rs.", "rate": 1.0, "unit": "Cr", "div": 1e7}
+    F = make_formatter(cur)
+    money = F["money"]
+    money1 = F["money1"]
+    money_kwh = F["money_kwh"]
+    money_wp = F["money_wp"]
+    money_small = F["money_small"]
+    sym = F["symbol"]
     mod_names = list(results.keys())
     n_mods = len(mod_names)
 
@@ -291,7 +300,7 @@ def generate_report(results, project_info, chart_dir, output_path):
         pdf.box(
             f"{short} - Equity IRR",
             f"{r['irr']*100:.2f}%",
-            f"NPV Rs.{r['npv']/1e7:.1f} Cr",
+            f"NPV {money1(r['npv'])}",
             x=bx + (bw + 1.5) * i,
             y=by,
             w=bw,
@@ -353,12 +362,12 @@ def generate_report(results, project_info, chart_dir, output_path):
         idx = mod_names.index(name)
         wp_row.append(f"{mod_info[idx]['wp'] if idx < len(mod_info) else 'N/A'} Wp")
         count_row.append(f"{r['module_count']:,}")
-        cost_row.append(f"Rs. {r['total_cost']/1e7:.2f} Cr")
-        equity_row.append(f"Rs. {r['equity']/1e7:.2f} Cr")
+        cost_row.append(money(r['total_cost']))
+        equity_row.append(money(r['equity']))
         gen_row.append(f"{r['gen_y1_kwh']/1e3:,.0f} MWh")
         irr_row.append(f"{r['irr']*100:.2f}%")
-        npv_row.append(f"Rs. {r['npv']/1e7:.2f} Cr")
-        lcoe_row.append(f"Rs. {r['lcoe']:.3f}/kWh")
+        npv_row.append(money(r['npv']))
+        lcoe_row.append(money_kwh(r['lcoe']))
         payback_row.append(f"{r['payback']} years")
 
     hi_rows.append(["Module Wattage"] + wp_row)
@@ -389,8 +398,8 @@ def generate_report(results, project_info, chart_dir, output_path):
     pdf.set_text_color(0, 80, 0)
     pdf.multi_cell(pw - 8, 5,
         f"RECOMMENDATION: {best_name} - Equity IRR {best_irr*100:.2f}% | "
-        f"NPV Rs. {best_r['npv']/1e7:.2f} Cr | LCOE Rs. {best_r['lcoe']:.3f}/kWh | "
-        f"Equity Rs. {best_r['equity']/1e7:.2f} Cr")
+        f"NPV {money(best_r['npv'])} | LCOE {money_kwh(best_r['lcoe'])} | "
+        f"Equity {money(best_r['equity'])}")
     pdf.set_y(y0 + h0 + 3)
 
     pdf.ln(3)
@@ -423,8 +432,8 @@ def generate_report(results, project_info, chart_dir, output_path):
     for i, name in enumerate(mod_names):
         r = results[name]
         label = mod_info[i]["short"] if i < len(mod_info) else name
-        pdf.bul(f"{label}: Equity IRR {r['irr']*100:.2f}% | NPV Rs. {r['npv']/1e7:.2f} Cr | LCOE Rs. {r['lcoe']:.3f}/kWh")
-        pdf.bul(f"  Equity: Rs. {r['equity']/1e7:.2f} Cr | Payback: {r['payback']} years")
+        pdf.bul(f"{label}: Equity IRR {r['irr']*100:.2f}% | NPV {money(r['npv'])} | LCOE {money_kwh(r['lcoe'])}")
+        pdf.bul(f"  Equity: {money(r['equity'])} | Payback: {r['payback']} years")
 
     if n_mods >= 2:
         gen_diff = ((results[mod_names[1]]["total_gen_kwh"] / results[mod_names[0]]["total_gen_kwh"]) - 1) * 100
@@ -603,7 +612,7 @@ def generate_report(results, project_info, chart_dir, output_path):
         ("Degradation Y1", "deg_y1", "%"),
         ("Degradation Annual", "deg_ann", "%"),
         ("Power Warranty", "warranty_yrs", "years"),
-        ("Price", "price_wp", "Rs./Wp"),
+        ("Price", "price_wp", f"{sym}/Wp"),
     ]
     for label, key, unit in spec_structure:
         row = [label]
@@ -618,7 +627,7 @@ def generate_report(results, project_info, chart_dir, output_path):
                 elif key == "deg_ann":
                     row.append(f"{val:.2f}")
                 elif key == "price_wp":
-                    row.append(f"Rs.{val:.1f}")
+                    row.append(money_wp(val))
                 elif key == "warranty_yrs":
                     row.append(str(int(val)))
                 else:
@@ -653,21 +662,22 @@ def generate_report(results, project_info, chart_dir, output_path):
 
     # 5.1 CAPEX
     pdf.sub_title("5.1 Capital Expenditure (CAPEX)")
-    caps = " vs ".join([f"Rs. {results[n]['total_cost']/1e7:.2f} Cr ({mod_info[i]['short'] if i < len(mod_info) else n})"
+    caps = " vs ".join([f"{money(results[n]['total_cost'])} ({mod_info[i]['short'] if i < len(mod_info) else n})"
                         for i, n in enumerate(mod_names)])
     pdf.ptext(f"Total project cost: {caps}.")
+    num = lambda v: f"{v / F['rate'] / F['div']:.2f}"
     cc = _fw(pdf, [2.5] + [1.5] * n_mods)
-    cc_headers = ["Cost Component (Rs. Cr)"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+    cc_headers = [f"Cost Component ({sym} {unit})"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
                                                   for i in range(n_mods)]
     capex_rows = []
     capex_rows.append(["Module Cost"] +
-                      [f"{results[n]['module_cost']/1e7:.2f}" for n in mod_names])
+                      [num(results[n]['module_cost']) for n in mod_names])
     capex_rows.append(["BoS, EPC & Land"] +
-                      [f"{results[n]['bos_cost']/1e7:.2f}" for n in mod_names])
+                      [num(results[n]['bos_cost']) for n in mod_names])
     capex_rows.append(["Total Project Cost"] +
-                      [f"{results[n]['total_cost']/1e7:.2f}" for n in mod_names])
+                      [num(results[n]['total_cost']) for n in mod_names])
     capex_rows.append(["Equity @ 30%"] +
-                      [f"{results[n]['equity']/1e7:.2f}" for n in mod_names])
+                      [num(results[n]['equity']) for n in mod_names])
     pdf.tbl_block(cc, cc_headers, capex_rows, bold_rows=[2, 3])
     pdf.ln(1)
 
@@ -732,24 +742,24 @@ def generate_report(results, project_info, chart_dir, output_path):
     cc2_headers = ["Financial Metric"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
                                            for i in range(n_mods)]
     fm_rows = []
-    fm_rows.append(["Total Project Cost (Rs. Cr)"] +
-                   [f"{results[n]['total_cost']/1e7:.2f}" for n in mod_names])
-    fm_rows.append(["Equity Required (Rs. Cr)"] +
-                   [f"{results[n]['equity']/1e7:.2f}" for n in mod_names])
+    fm_rows.append([f"Total Project Cost ({sym} {unit})"] +
+                   [num(results[n]['total_cost']) for n in mod_names])
+    fm_rows.append([f"Equity Required ({sym} {unit})"] +
+                   [num(results[n]['equity']) for n in mod_names])
     fm_rows.append(["Annual Gen Y1 (MWh)"] +
                    [f"{results[n]['gen_y1_kwh']/1e3:,.0f}" for n in mod_names])
     fm_rows.append(["Total Gen 25yr (GWh)"] +
                    [f"{results[n]['total_gen_kwh']/1e6:.1f}" for n in mod_names])
     fm_rows.append(["CUF (%)"] +
                    [f"{results[n]['cuf']*100:.1f}" for n in mod_names])
-    fm_rows.append(["Revenue Y1 (Rs. Cr)"] +
-                   [f"{results[n]['revenue'][1]/1e7:.2f}" for n in mod_names])
+    fm_rows.append([f"Revenue Y1 ({sym} {unit})"] +
+                   [num(results[n]['revenue'][1]) for n in mod_names])
     fm_rows.append(["Equity IRR (%)"] +
                    [f"{results[n]['irr']*100:.2f}" for n in mod_names])
-    fm_rows.append(["NPV @ 10% (Rs. Cr)"] +
-                   [f"{results[n]['npv']/1e7:.2f}" for n in mod_names])
-    fm_rows.append(["LCOE (Rs./kWh)"] +
-                   [f"{results[n]['lcoe']:.3f}" for n in mod_names])
+    fm_rows.append([f"NPV @ 10% ({sym} {unit})"] +
+                   [num(results[n]['npv']) for n in mod_names])
+    fm_rows.append([f"LCOE ({sym}/kWh)"] +
+                   [f"{results[n]['lcoe']/F['rate']:.3f}" for n in mod_names])
     fm_rows.append(["Payback Period (years)"] +
                    [f"{results[n]['payback']}" for n in mod_names])
 
@@ -833,7 +843,7 @@ def generate_report(results, project_info, chart_dir, output_path):
 
     risks = [
         ("PPA Tariff Risk",
-         "Rs. 0.50/kWh reduction reduces IRR by ~3-4%. All modules equally exposed."),
+         f"{money_small(0.50)}/kWh reduction reduces IRR by ~3-4%. All modules equally exposed."),
         ("Generation Risk",
          "10% lower CUF reduces IRR by ~4-5%. Lower temp coeff modules offer marginal protection."),
         ("Interest Rate Risk",
@@ -858,12 +868,12 @@ def generate_report(results, project_info, chart_dir, output_path):
         cheapest_idx = prices.index(min_price)
         cheapest = mod_info[cheapest_idx]["short"] if cheapest_idx < len(mod_info) else mod_names[cheapest_idx]
         pdf.ptext(
-            f"Module price is the single largest return lever (~3% IRR per Rs. 1/Wp change). "
-            f"{cheapest}'s price advantage of Rs. {price_diff:.1f}/Wp is a key driver of return differentials."
+            f"Module price is the single largest return lever (~3% IRR per {money_small(1)}/Wp change). "
+            f"{cheapest}'s price advantage of {money_wp(price_diff)} is a key driver of return differentials."
         )
     else:
         pdf.ptext(
-            "Module price is the single largest return lever (~3% IRR per Rs. 1/Wp change). "
+            f"Module price is the single largest return lever (~3% IRR per {money_small(1)}/Wp change). "
             "All modules are priced equally; performance characteristics drive return differentials."
         )
 
@@ -887,11 +897,11 @@ def generate_report(results, project_info, chart_dir, output_path):
 
         a_adv = [f"Equity IRR: {r_a['irr']*100:.2f}% vs {r_b['irr']*100:.2f}%"]
         if r_a["total_cost"] < r_b["total_cost"]:
-            a_adv.append(f"Lower project cost: saves Rs. {(r_b['total_cost']-r_a['total_cost'])/1e7:.2f} Cr")
+            a_adv.append(f"Lower project cost: saves {money(r_b['total_cost']-r_a['total_cost'])}")
         if r_a["equity"] < r_b["equity"]:
-            a_adv.append(f"Lower equity: Rs. {r_a['equity']/1e7:.2f} Cr")
+            a_adv.append(f"Lower equity: {money(r_a['equity'])}")
         if r_a["lcoe"] < r_b["lcoe"]:
-            a_adv.append(f"Lower LCOE: Rs. {r_a['lcoe']:.3f}/kWh")
+            a_adv.append(f"Lower LCOE: {money_kwh(r_a['lcoe'])}")
         if r_a["temp_coeff"] < r_b["temp_coeff"]:
             a_adv.append(f"Better temp. coeff.: {r_a['temp_coeff']:.3f}%/C")
         if r_a["warranty_yrs"] > r_b["warranty_yrs"]:
@@ -899,7 +909,7 @@ def generate_report(results, project_info, chart_dir, output_path):
 
         b_adv = []
         if r_b["npv"] > r_a["npv"]:
-            b_adv.append(f"Higher NPV: Rs. {r_b['npv']/1e7:.2f} Cr")
+            b_adv.append(f"Higher NPV: {money(r_b['npv'])}")
         if r_b["total_gen_kwh"] > r_a["total_gen_kwh"] * 1.005:
             b_adv.append(f"More 25-yr generation: {r_b['total_gen_kwh']/1e6:.1f} GWh")
         if r_b["deg_ann"] < r_a["deg_ann"]:
@@ -926,8 +936,8 @@ def generate_report(results, project_info, chart_dir, output_path):
         for i, name in enumerate(mod_names):
             r = results[name]
             advs = [f"IRR: {r['irr']*100:.2f}%"]
-            advs.append(f"NPV: Rs.{r['npv']/1e7:.2f} Cr")
-            advs.append(f"LCOE: Rs.{r['lcoe']:.3f}/kWh")
+            advs.append(f"NPV: {money(r['npv'])}")
+            advs.append(f"LCOE: {money_kwh(r['lcoe'])}")
             if r.get("deg_ann"):
                 advs.append(f"Degr.: {r['deg_ann']}%/yr")
             if r.get("temp_coeff"):
@@ -963,7 +973,7 @@ def generate_report(results, project_info, chart_dir, output_path):
     pdf.multi_cell(pw2 - 8, 5.5,
         f"RECOMMENDATION: {best_name} is recommended based on {score_str}"
         f"Equity IRR {best_irr*100:.2f}%, "
-        f"equity Rs. {best_r['equity']/1e7:.2f} Cr, and LCOE Rs. {best_r['lcoe']:.2f}/kWh. "
+        f"equity {money(best_r['equity'])}, and LCOE {money_kwh(best_r['lcoe'])}. "
         f"DCR certification ensures bankability and investor confidence.")
     pdf.set_y(y_rec + box_h + 3)
 
@@ -976,7 +986,7 @@ def generate_report(results, project_info, chart_dir, output_path):
         if alt_r["npv"] > best_r["npv"]:
             pdf.multi_cell(0, 4.5,
                 f"Note: If maximising total lifetime returns is the priority, {alt_name}'s higher NPV "
-                f"(Rs. {alt_r['npv']/1e7:.2f} Cr vs Rs. {best_r['npv']/1e7:.2f} Cr) makes it a "
+                f"({money(alt_r['npv'])} vs {money(best_r['npv'])}) makes it a "
                 f"compelling alternative.")
         else:
             pdf.multi_cell(0, 4.5,
