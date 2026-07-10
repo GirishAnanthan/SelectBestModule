@@ -6,10 +6,6 @@ Integrates with weather_data.py for NASA POWER API and scoring.py for rankings.
 import numpy as np
 import numpy_financial as npf
 import json, os, logging
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
 
 from weather_data import (
     fetch_nasa_power_monthly, compute_annual_solar_metrics,
@@ -400,6 +396,9 @@ def _style_axes(ax):
 
 def _make_ts_chart(data_list, names, colors, title, ylabel, fn):
     """Time series line chart for N data series (matplotlib)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(10, 3.5), dpi=100)
     n_pts = len(data_list[0]) - 1
     years = list(range(1, n_pts + 1))
@@ -418,6 +417,9 @@ def _make_ts_chart(data_list, names, colors, title, ylabel, fn):
 
 def _make_grouped_bar_chart(group1_vals, group2_vals, names, colors, labels, title, fn):
     """Grouped bar chart with two metric groups (e.g. IRR and NPV)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     import numpy as np
     fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
     n_mods = len(names)
@@ -442,6 +444,9 @@ def _make_grouped_bar_chart(group1_vals, group2_vals, names, colors, labels, tit
 
 def _make_pie_chart(data, labels, title, fn, sym, rate, div, unit="Cr"):
     """Pie chart of cost breakdown for the first module."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(8, 6.5), dpi=100)
     palette = ["#3498db", "#2ecc71"]
     total = sum(data)
@@ -459,6 +464,9 @@ def _make_pie_chart(data, labels, title, fn, sym, rate, div, unit="Cr"):
 
 def _make_loss_diagram(loss_series, module_name, fn):
     """PVSyst-style waterfall loss diagram from irradiance to grid (matplotlib)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     labels = ["POA\nIrradiance"]
     values = [100.0]
     for name, pct, cumulative in loss_series:
