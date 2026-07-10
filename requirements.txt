@@ -1,7 +1,7 @@
 streamlit==1.35.0
 fpdf2==2.7.6
 pypdf==4.1.0
-Pillow>=11.0.0
+Pillow==11.3.0
 pytesseract==0.3.10
 PyMuPDF==1.23.26
 pdfminer.six==20240706
