@@ -8,4 +8,4 @@ pdfminer.six==20240706
 numpy==1.26.4
 numpy-financial==1.0.0
 requests==2.31.0
-matplotlib==3.9.2
+matplotlib==3.8.4
