@@ -171,16 +171,16 @@ def render_module_ui(idx):
             noct = st.number_input("NOCT (°C)", 0, 60, int(specs.get("noct", 0) or 0), key=f"noct_{idx}")
 
         specs.update(
-            vmp=vmp if vmp else specs.get("vmp"),
-            imp=imp if imp else specs.get("imp"),
-            voc=voc if voc else specs.get("voc"),
-            isc=isc if isc else specs.get("isc"),
-            efficiency_pct=eff if eff else specs.get("efficiency_pct"),
-            temp_coeff_pmax=-tc if tc else specs.get("temp_coeff_pmax"),
-            deg_y1_pct=deg_y1 if deg_y1 else specs.get("deg_y1_pct"),
-            deg_annual_pct=deg_ann if deg_ann else specs.get("deg_annual_pct"),
-            warranty_power=pw if pw else specs.get("warranty_power"),
-            noct=noct if noct else specs.get("noct"),
+            vmp=vmp,
+            imp=imp,
+            voc=voc,
+            isc=isc,
+            efficiency_pct=eff,
+            temp_coeff_pmax=-tc,
+            deg_y1_pct=deg_y1,
+            deg_annual_pct=deg_ann,
+            warranty_power=pw,
+            noct=noct,
         )
 
         return specs
