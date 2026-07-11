@@ -5,8 +5,3 @@ fontconfig
 libfreetype6
 zlib1g-dev
 libjpeg62-turbo-dev
-libpng-dev
-libtiff-dev
-libfreetype6-dev
-liblcms2-dev
-libwebp-dev
