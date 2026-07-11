@@ -228,10 +228,12 @@ def _detect_power_options(text, lines):
             all_powers.add(val)
 
     # --- Strategy 5: wattage range from product title/cover ---
-    # Matches: "580 To 610W", "580-610W", "580 to 610 Wp", "580W ~ 610W"
+    # Matches: "580 To 610W", "580-610W", "580 to 610 Wp",
+    #          "580W ~ 610W", "610Wp - 650Wp", "610W - 650W",
+    #          "580 to 610" (no unit suffix)
     range_powers = set()
     range_m = re.search(
-        r"(\d{3})\s*(?:To|to|~|-)\s*(\d{3})\s*W[pP]?",
+        r"(\d{3})(?:\s*W[pP])?\s*(?:[–\-]|to|To|~)\s*(\d{3})\s*W[pP]?",
         text
     )
     if range_m:
@@ -871,15 +873,24 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
         candidate = dm.group(1)
         if len(candidate) >= 4:
             mfr = candidate[0].upper() + candidate[1:]
-    # 2. Company suffix
+    # 2. Company suffix — match proper company names (2+ words before suffix)
     if not mfr:
-        em = re.search(
-            r"([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\s+"
-            r"(?:Energy|Energies|Technologies|Pvt\.?\s*Ltd|Industries|Power|Solar)",
-            text,
+        _tech_words = re.compile(
+            r"TOPCon|PERC|HJT|Bifacial|Half.?Cut|Maximum|Nominal|"
+            r"Mechanical|Electrical|Backside|Generated|Optimum|Operating|"
+            r"Linear|Module|Split|Junction|Frame|Cover|Weight|Design|Scan|"
+            r"Product|Years|Warranty|Certificate|Advanced|Enlisted|First|Annual",
+            re.IGNORECASE,
         )
-        if em:
-            mfr = em.group(1).strip()
+        for _em in re.finditer(
+            r"(?<![\w-])([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){2,})\s+"
+            r"(?:Energy|Energies|Technologies|Pvt\.?\s*Ltd|Industries|Power|Solar)\b",
+            text,
+        ):
+            _candidate = _em.group(1).strip()
+            if not _tech_words.search(_candidate):
+                mfr = _candidate
+                break
     # 3. First capitalised multi-word on early lines
     if not mfr:
         skip = (r"Watt|Volt|Amp|Cell|Module|Panel|Model|Temp|Graph|I-V|"
