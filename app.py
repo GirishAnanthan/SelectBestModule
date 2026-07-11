@@ -157,7 +157,13 @@ def render_module_ui(idx):
 
         pdf_bytes = uploaded.read()
 
-        specs = cached_parse(pdf_bytes, default_tech)
+        try:
+            specs = cached_parse(pdf_bytes, default_tech)
+        except Exception as e:
+            st.error(f"Failed to parse {uploaded.name}: {e}")
+            return None
+        if specs.get("_error"):
+            st.warning(f"Partial parse for {uploaded.name}: {specs['_error']}")
         st.success(f"Extracted via {specs.get('_extraction_method', 'N/A')}")
 
         if specs.get("power_options"):
@@ -169,7 +175,11 @@ def render_module_ui(idx):
                 options=opts, index=default_idx,
                 key=f"wp_{idx}",
             )
-            specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+            try:
+                specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+            except Exception as e:
+                st.error(f"Failed to re-parse {uploaded.name}: {e}")
+                return None
             specs["power_wp"] = int(selected_wp)
         else:
             st.warning("Could not detect power ratings. Enter manually below.")
@@ -232,12 +242,22 @@ if batch_files:
     for bi, bf in enumerate(batch_files):
         pdf_bytes = bf.read()
         default_tech = DEFAULT_TECHS[bi] if bi < len(DEFAULT_TECHS) else "Mono PERC"
-        specs = cached_parse(pdf_bytes, default_tech)
+        try:
+            specs = cached_parse(pdf_bytes, default_tech)
+        except Exception as e:
+            st.error(f"Failed to parse {bf.name}: {e}")
+            continue
+        if specs.get("_error"):
+            st.warning(f"Partial parse for {bf.name}: {specs['_error']}")
         if specs.get("power_options"):
             selected_wp = max(specs["power_options"])
         else:
             selected_wp = specs.get("power_wp") or 600
-        specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+        try:
+            specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+        except Exception as e:
+            st.error(f"Failed to re-parse {bf.name}: {e}")
+            continue
         specs["power_wp"] = int(selected_wp)
         default_price = 20 if "redren" in (bf.name or "").lower() else 22
         specs["price_per_wp"] = default_price

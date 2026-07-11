@@ -880,10 +880,28 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
 
 def extract_module_specs(pdf_bytes, technology_hint=None, selected_wp=None):
     """Extract text from PDF, parse specs, return structured data dict."""
-    text, method = extract_text_from_pdf(pdf_bytes)
-    specs = parse_specs(text, technology_hint, selected_wp=selected_wp)
-    specs["_extraction_method"] = method
-    specs["_raw_text_length"] = len(text)
+    try:
+        text, method = extract_text_from_pdf(pdf_bytes)
+        specs = parse_specs(text, technology_hint, selected_wp=selected_wp)
+        specs["_extraction_method"] = method
+        specs["_raw_text_length"] = len(text)
+    except Exception as e:
+        logger.warning("PDF parsing failed: %s", e)
+        specs = {
+            "power_options": [],
+            "power_wp": None,
+            "efficiency_pct": 21.0,
+            "technology": technology_hint or "Mono PERC",
+            "temp_coeff_pmax": -0.35,
+            "deg_y1_pct": 2.0,
+            "deg_annual_pct": 0.55,
+            "warranty_power": 25,
+            "warranty_product": 12,
+            "noct": 43,
+            "bifacial": False,
+            "_extraction_method": "error",
+            "_error": str(e),
+        }
     return specs
 
 
