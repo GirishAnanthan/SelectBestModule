@@ -873,24 +873,28 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
         candidate = dm.group(1)
         if len(candidate) >= 4:
             mfr = candidate[0].upper() + candidate[1:]
-    # 2. Company suffix — match proper company names (2+ words before suffix)
+    # 2. Company suffix — match "Name Power/Solar/Energy" patterns
     if not mfr:
         _tech_words = re.compile(
             r"TOPCon|PERC|HJT|Bifacial|Half.?Cut|Maximum|Nominal|"
             r"Mechanical|Electrical|Backside|Generated|Optimum|Operating|"
             r"Linear|Module|Split|Junction|Frame|Cover|Weight|Design|Scan|"
-            r"Product|Years|Warranty|Certificate|Advanced|Enlisted|First|Annual",
+            r"Product|Years|Warranty|Certificate|Advanced|Enlisted|First|Annual|"
+            r"Type|Mounting|Shipping|Packing|System|Standard|Temperature",
             re.IGNORECASE,
         )
+        _first_valid = None
         for _em in re.finditer(
-            r"(?<![\w-])([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){2,})\s+"
+            r"(?<![\w-])([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\s+"
             r"(?:Energy|Energies|Technologies|Pvt\.?\s*Ltd|Industries|Power|Solar)\b",
             text,
         ):
             _candidate = _em.group(1).strip()
-            if not _tech_words.search(_candidate):
-                mfr = _candidate
+            if not _tech_words.search(_candidate) and not re.search(r"\b(Watt|Volt|Amp)\b", _candidate):
+                _first_valid = _candidate
                 break
+        if _first_valid:
+            mfr = _first_valid
     # 3. First capitalised multi-word on early lines
     if not mfr:
         skip = (r"Watt|Volt|Amp|Cell|Module|Panel|Model|Temp|Graph|I-V|"
