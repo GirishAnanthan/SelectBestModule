@@ -3,5 +3,3 @@ libtesseract-dev
 poppler-utils
 fontconfig
 libfreetype6
-zlib1g-dev
-libjpeg62-turbo-dev
