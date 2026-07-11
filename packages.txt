@@ -3,7 +3,6 @@ libtesseract-dev
 poppler-utils
 fontconfig
 libfreetype6
-# Pillow build dependencies (no cp314 wheel for 10.x, must build from source)
 zlib1g-dev
 libjpeg62-turbo-dev
 libpng-dev
