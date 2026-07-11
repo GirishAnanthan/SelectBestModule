@@ -316,8 +316,16 @@ def _extract_electrical(lines, text, selected_wp):
     ):
         return result
 
-    # ---- Strategy D: Heuristic scan (last resort) ----
+    # ---- Strategy D: Heuristic scan ----
     result = _strategy_D_heuristic(lines, selected_wp)
+    if result and _is_valid_elec(
+        result.get("vmp", 0), result.get("imp", 0),
+        result.get("isc", 0), result.get("voc", 0), selected_wp
+    ):
+        return result
+
+    # ---- Strategy E: Vertical-stacked (SoliFusion style) ----
+    result = _strategy_E_vertical_stacked(lines, selected_wp)
     if result and _is_valid_elec(
         result.get("vmp", 0), result.get("imp", 0),
         result.get("isc", 0), result.get("voc", 0), selected_wp
@@ -620,6 +628,57 @@ def _strategy_D_heuristic(lines, selected_wp):
         result = _pick_stc_from_sequence(filtered, selected_wp)
         if result:
             return result
+
+    return {}
+
+
+def _strategy_E_vertical_stacked(lines, selected_wp):
+    """
+    Vertical-stacked format: each row value is on its own line.
+    After "Electrical Characteristics (STC)", data appears as:
+      Pmax (int)     e.g. 650
+      Vmp  (float)         41.98
+      Imp  (float)         15.49
+      Voc  (float)         49.66
+      Isc  (float)         16.39
+      Eff  (float)         24.04
+      Pmax (duplicate)     650  (skipped)
+    """
+    stc_start = None
+    for i, line in enumerate(lines):
+        if re.search(r"Electrical Characteristics.*STC", line, re.IGNORECASE):
+            stc_start = i + 1
+            break
+    if stc_start is None:
+        return {}
+
+    floats = []
+    for line in lines[stc_start:]:
+        if re.search(r"Voltage.*Power|Power.*Voltage|Power-Voltage|Current-Voltage", line):
+            break
+        vals = _to_floats(line)
+        if vals:
+            floats.extend(vals)
+
+    i = 0
+    while i < len(floats):
+        v = floats[i]
+        if 300 <= v <= 750 and v == int(v):
+            if i + 5 < len(floats):
+                vmp, imp, voc, isc, eff = floats[i+1:i+6]
+                next_v = floats[i+6] if i+6 < len(floats) else 0
+                offset = 7 if (300 <= next_v <= 750 and next_v == int(next_v) and v == int(v)) else 6
+                if (25 <= vmp <= 65 and 8 <= imp <= 22 and
+                    8 <= isc <= 24 and 30 <= voc <= 75 and
+                    15 <= eff <= 30 and int(v) == selected_wp):
+                    return {
+                        "vmp": vmp, "imp": imp,
+                        "isc": isc, "voc": voc,
+                        "efficiency_pct": eff,
+                    }
+                i += offset
+                continue
+        i += 1
 
     return {}
 
