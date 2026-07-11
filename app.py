@@ -5,10 +5,6 @@ Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 import streamlit as st
 import os, io, json, tempfile, sys, re, hashlib
 from datetime import datetime
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_DIR)
 
@@ -663,19 +659,28 @@ if uploaded_all:
                     _highs.append(_r_hi[best_name]["irr"] * 100 - base_irr)
                     _labels.append(_lab)
 
-                _fig, _ax = plt.subplots(figsize=(7, 4))
+                import plotly.graph_objects as _go
+                _fig = _go.Figure()
                 for i, _lab in enumerate(_labels):
-                    _ax.plot([_lows[i], _highs[i]], [i, i], color="gray", lw=1.2)
-                    _ax.scatter([_lows[i]], [i], color="#e74c3c", zorder=3)
-                    _ax.scatter([_highs[i]], [i], color="#27ae60", zorder=3)
-                _ax.set_yticks(range(len(_labels)))
-                _ax.set_yticklabels(_labels)
-                _ax.axvline(0, color="black", lw=0.8)
-                _ax.set_xlabel(f"IRR change vs base (%-pts)  |  base IRR {base_irr:.1f}%")
-                _ax.set_title(f"Tornado - IRR sensitivity ({best_name})")
-                _ax.grid(axis="x", alpha=0.3)
-                st.pyplot(_fig)
-                plt.close(_fig)
+                    _fig.add_trace(_go.Scatter(
+                        x=[_lows[i], _highs[i]], y=[i, i],
+                        mode="lines+markers",
+                        line=dict(color="gray", width=1.5),
+                        marker=dict(size=8, color=["#e74c3c", "#27ae60"]),
+                        showlegend=False,
+                    ))
+                _fig.add_vline(x=0, line=dict(color="black", width=1))
+                _fig.update_layout(
+                    title=f"Tornado - IRR sensitivity ({best_name})",
+                    xaxis=dict(title=f"IRR change vs base (%-pts)  |  base IRR {base_irr:.1f}%",
+                               gridcolor="#eee"),
+                    yaxis=dict(tickmode="array", tickvals=list(range(len(_labels))),
+                               ticktext=_labels),
+                    template="none",
+                    height=400,
+                    margin=dict(l=20, r=20, t=40, b=60),
+                )
+                st.plotly_chart(_fig, use_container_width=True)
 
             # ===================== CSV EXPORT =====================
             import csv as _csv

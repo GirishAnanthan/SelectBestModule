@@ -278,9 +278,6 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
 # Chart generation
 # ---------------------------------------------------------------------------
 
-_PLOT_BG = (1.0, 1.0, 1.0)
-
-
 def _hex(color_tuple):
     return "#%02x%02x%02x" % color_tuple
 
@@ -387,120 +384,130 @@ def generate_charts(results, module_list, project_params, chart_dir, currency=No
     return charts
 
 
-def _style_axes(ax):
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.set_facecolor(_PLOT_BG)
-    for spine in ("top", "right"):
-        ax.spines[spine].set_visible(False)
-
-
 def _make_ts_chart(data_list, names, colors, title, ylabel, fn):
-    """Time series line chart for N data series (matplotlib)."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(figsize=(10, 3.5), dpi=100)
+    """Time series line chart for N data series (plotly)."""
+    import plotly.graph_objects as go
+    import plotly.io as pio
     n_pts = len(data_list[0]) - 1
     years = list(range(1, n_pts + 1))
+    fig = go.Figure()
     for idx, data in enumerate(data_list):
-        ax.plot(years, data[1:], color=colors[idx], linewidth=2, label=names[idx], marker="o", markersize=3)
-    _style_axes(ax)
-    ax.set_title(title, fontsize=12, fontweight="bold", color="#003366")
-    ax.set_xlabel("Year", fontsize=10)
-    ax.set_ylabel(ylabel, fontsize=10)
-    ax.legend(loc="best", fontsize=8, frameon=False)
-    fig.tight_layout()
-    fig.savefig(fn, facecolor="white")
-    plt.close(fig)
+        fig.add_trace(go.Scatter(
+            x=years, y=data[1:],
+            mode="lines+markers",
+            name=names[idx],
+            line=dict(color=colors[idx], width=2),
+            marker=dict(size=4),
+        ))
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=12, color="#003366")),
+        xaxis=dict(title="Year", gridcolor="#eee", showline=False),
+        yaxis=dict(title=ylabel, gridcolor="#eee"),
+        template="none",
+        width=1000, height=350,
+        margin=dict(l=50, r=20, t=50, b=50),
+        legend=dict(font=dict(size=10)),
+    )
+    pio.write_image(fig, fn, format="png")
     return fn
 
 
 def _make_grouped_bar_chart(group1_vals, group2_vals, names, colors, labels, title, fn):
-    """Grouped bar chart with two metric groups (e.g. IRR and NPV)."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import numpy as np
-    fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
-    n_mods = len(names)
-    x = np.arange(n_mods)
-    width = 0.35
-    ax.bar(x - width / 2, group1_vals, width, label=labels[0], color=colors, alpha=0.85)
-    ax.bar(x + width / 2, group2_vals, width, label=labels[1], color="#e67e22", alpha=0.85)
-    _style_axes(ax)
-    ax.set_xticks(x)
-    ax.set_xticklabels(names, fontsize=9)
-    ax.set_title(title, fontsize=12, fontweight="bold", color="#003366")
-    ax.legend(fontsize=9, frameon=False)
-    for i, v in enumerate(group1_vals):
-        ax.text(i - width / 2, v, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
-    for i, v in enumerate(group2_vals):
-        ax.text(i + width / 2, v, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(fn, facecolor="white")
-    plt.close(fig)
+    """Grouped bar chart with two metric groups (e.g. IRR and NPV) - plotly."""
+    import plotly.graph_objects as go
+    import plotly.io as pio
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=names, y=group1_vals,
+        name=labels[0],
+        marker=dict(color=colors),
+        text=[f"{v:.1f}" for v in group1_vals],
+        textposition="outside",
+    ))
+    fig.add_trace(go.Bar(
+        x=names, y=group2_vals,
+        name=labels[1],
+        marker=dict(color="#e67e22"),
+        text=[f"{v:.1f}" for v in group2_vals],
+        textposition="outside",
+    ))
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=12, color="#003366")),
+        barmode="group",
+        template="none",
+        width=800, height=600,
+        margin=dict(l=50, r=20, t=50, b=50),
+        legend=dict(font=dict(size=10)),
+        yaxis=dict(gridcolor="#eee"),
+    )
+    pio.write_image(fig, fn, format="png")
     return fn
 
 
 def _make_pie_chart(data, labels, title, fn, sym, rate, div, unit="Cr"):
-    """Pie chart of cost breakdown for the first module."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(figsize=(8, 6.5), dpi=100)
-    palette = ["#3498db", "#2ecc71"]
+    """Pie chart of cost breakdown for the first module - plotly."""
+    import plotly.graph_objects as go
+    import plotly.io as pio
     total = sum(data)
-    wedges, _, _ = ax.pie(data, labels=None, colors=palette, startangle=90,
-                         autopct=lambda p: f"{p:.1f}%", textprops={"fontsize": 9})
-    ax.set_title(title, fontsize=12, fontweight="bold", color="#003366")
-    leg = [f"{lab}: {sym} {v / rate / div:.1f}{unit} ({v / total * 100:.1f}%)"
-           for lab, v in zip(labels, data)]
-    ax.legend(wedges, leg, loc="center left", bbox_to_anchor=(0.95, 0.5), fontsize=9, frameon=False)
-    fig.tight_layout()
-    fig.savefig(fn, facecolor="white", bbox_inches="tight")
-    plt.close(fig)
+    full_labels = [
+        f"{lab}: {sym} {v / rate / div:.1f}{unit} ({v / total * 100:.1f}%)"
+        for lab, v in zip(labels, data)
+    ]
+    fig = go.Figure(go.Pie(
+        values=data,
+        labels=full_labels,
+        textinfo="label+percent",
+        marker=dict(colors=["#3498db", "#2ecc71"]),
+        textposition="outside",
+    ))
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=12, color="#003366")),
+        template="none",
+        width=800, height=650,
+        margin=dict(l=50, r=50, t=50, b=50),
+        showlegend=False,
+    )
+    pio.write_image(fig, fn, format="png")
     return fn
 
 
 def _make_loss_diagram(loss_series, module_name, fn):
-    """PVSyst-style waterfall loss diagram from irradiance to grid (matplotlib)."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    labels = ["POA\nIrradiance"]
+    """PVSyst-style waterfall loss diagram from irradiance to grid (plotly)."""
+    import plotly.graph_objects as go
+    import plotly.io as pio
+    labels = ["POA Irradiance"]
     values = [100.0]
     for name, pct, cumulative in loss_series:
-        labels.append(name)
+        labels.append(name.replace("\n", " "))
         values.append(pct)
-    labels.append("Grid\nInjection")
+    labels.append("Grid Injection")
     final_val = loss_series[-1][2] if loss_series else 100.0
     values.append(final_val)
 
-    n = len(values)
-    fig, ax = plt.subplots(figsize=(10, 5), dpi=100)
-    running = 100.0
-    for i in range(n):
-        if i == 0:
-            ax.bar(i, values[i], color="#2ecc71", edgecolor="white")
-        elif i == n - 1:
-            ax.bar(i, values[i], color="#2ecc71", edgecolor="white")
-        else:
-            ax.bar(i, values[i], bottom=running - values[i], color="#e74c3c", edgecolor="white")
-            running -= values[i]
-        # connector line
-        if i < n - 1:
-            y_prev = 100.0 if i == 0 else loss_series[i - 1][2]
-            ax.plot([i, i + 1], [y_prev, y_prev], color="gray", linewidth=1, linestyle="--")
-    ax.set_xticks(range(n))
-    ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("Energy (% of POA)", fontsize=10)
-    ax.set_ylim(0, 108)
-    ax.set_title(f"PVSyst-Style Loss Diagram — {module_name}", fontsize=12, fontweight="bold", color="#003366")
-    _style_axes(ax)
-    ax.grid(axis="x", visible=False)
-    fig.tight_layout()
-    fig.savefig(fn, facecolor="white")
-    plt.close(fig)
+    measure = ["absolute"] + ["relative"] * (len(values) - 2) + ["total"]
+
+    fig = go.Figure(go.Waterfall(
+        orientation="v",
+        measure=measure,
+        x=labels,
+        y=values,
+        text=[f"{v:.1f}%" for v in values],
+        textposition="outside",
+        connector=dict(line=dict(color="gray", width=1, dash="dot")),
+        increasing=dict(marker=dict(color="#2ecc71")),
+        decreasing=dict(marker=dict(color="#e74c3c")),
+        totals=dict(marker=dict(color="#2ecc71")),
+    ))
+    fig.update_layout(
+        title=dict(text=f"PVSyst-Style Loss Diagram — {module_name}",
+                   font=dict(size=12, color="#003366")),
+        yaxis=dict(title="Energy (% of POA)", range=[0, 108], gridcolor="#eee"),
+        template="none",
+        width=1000, height=500,
+        margin=dict(l=50, r=20, t=50, b=80),
+        showlegend=False,
+    )
+    pio.write_image(fig, fn, format="png")
     return fn
 
 
