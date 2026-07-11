@@ -134,10 +134,6 @@ with st.sidebar:
         st.session_state.pop("cfg", None)
         st.rerun()
 
-    st.markdown("---")
-    n_modules = st.number_input("Modules to Compare", 2, 5, 2, 1,
-                                 help="Number of modules to compare (2-5)")
-
 # ===== MAIN: Module Upload & Parse =====
 DEFAULT_TECHS = ["Mono PERC", "N-TOPCon", "HJT", "Mono PERC", "Poly PERC"]
 
@@ -228,50 +224,15 @@ def render_module_ui(idx):
 
         return specs
 
-# Render module UI for each module (supports batch + manual entry)
+# Module count selector + individual uploaders
 st.markdown("---")
 st.header("📄 Module Datasheets")
-batch_files = st.file_uploader(
-    "📥 Batch upload multiple datasheets (optional)",
-    type=["pdf"], accept_multiple_files=True, key="batch_upload",
-    help="Upload several PDFs at once to auto-compare them. Overrides the manual section below.",
-)
-
-if batch_files:
-    module_specs_list = []
-    for bi, bf in enumerate(batch_files):
-        pdf_bytes = bf.read()
-        default_tech = DEFAULT_TECHS[bi] if bi < len(DEFAULT_TECHS) else "Mono PERC"
-        try:
-            specs = cached_parse(pdf_bytes, default_tech)
-        except Exception as e:
-            st.error(f"Failed to parse {bf.name}: {e}")
-            continue
-        if specs.get("_error"):
-            st.warning(f"Partial parse for {bf.name}: {specs['_error']}")
-        if specs.get("power_options"):
-            selected_wp = max(specs["power_options"])
-        else:
-            selected_wp = specs.get("power_wp") or 600
-        try:
-            specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
-        except Exception as e:
-            st.error(f"Failed to re-parse {bf.name}: {e}")
-            continue
-        specs["power_wp"] = int(selected_wp)
-        default_price = 20 if "redren" in (bf.name or "").lower() else 22
-        specs["price_per_wp"] = default_price
-        specs["_filename"] = bf.name
-        st.success(f"Module {bi + 1} ({bf.name}): extracted via {specs.get('_extraction_method', 'N/A')} "
-                   f"@ {specs['power_wp']}Wp, {specs.get('technology', 'N/A')}")
-        module_specs_list.append(specs)
-    st.info("Batch mode active. Use the manual section below for single-module fine-tuning "
-            "or clear the batch uploader to switch back.")
-else:
-    module_specs_list = []
-    for i in range(n_modules):
-        specs = render_module_ui(i)
-        module_specs_list.append(specs)
+n_modules = st.number_input("Number of modules to compare", 2, 5, 2, 1, key="n_mod",
+                            help="Select how many modules to compare (2-5)")
+module_specs_list = []
+for i in range(n_modules):
+    specs = render_module_ui(i)
+    module_specs_list.append(specs)
 
 # ----- Apply loaded configuration overrides -----
 _cfg = st.session_state.get("cfg")
