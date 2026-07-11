@@ -35,10 +35,10 @@ def fetch_nasa_power_monthly(lat, lon, start_year=2020, end_year=2024):
     url = (
         f"https://power.larc.nasa.gov/api/temporal/monthly/point"
         f"?parameters={param_str}"
-        f"&community=RE"
+        f"&community=re"
         f"&latitude={lat}&longitude={lon}"
         f"&start={start_year}&end={end_year}"
-        f"&format=JSON"
+        f"&format=json"
     )
     try:
         resp = requests.get(url, timeout=30)
