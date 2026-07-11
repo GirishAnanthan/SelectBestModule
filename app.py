@@ -347,19 +347,25 @@ if uploaded_all:
         if specs is None:
             continue
         mfr = _get_mfr_name(specs, i)
+        cap_w = specs.get("power_wp") or 600
+        eff = specs.get("efficiency_pct") or 21.0
+        tc = specs.get("temp_coeff_pmax") or -0.35
+        deg_y1 = specs.get("deg_y1_pct") or 2.0
+        deg_ann = specs.get("deg_annual_pct") or 0.55
+        price = specs.get("price_per_wp") or 20.0
         mod_list.append({
             "name": mfr,
             "short": mfr,
-            "capacity_w": specs["power_wp"],
-            "efficiency_pct": specs.get("efficiency_pct", 21.0),
-            "temp_coeff_pmax": specs.get("temp_coeff_pmax", -0.35),
-            "deg_y1_pct": specs.get("deg_y1_pct", 2.0),
-            "deg_annual_pct": specs.get("deg_annual_pct", 0.55),
-            "price_per_wp": specs["price_per_wp"],
-            "warranty_yrs": specs.get("warranty_power", 25),
+            "capacity_w": cap_w,
+            "efficiency_pct": eff,
+            "temp_coeff_pmax": tc,
+            "deg_y1_pct": deg_y1,
+            "deg_annual_pct": deg_ann,
+            "price_per_wp": price,
+            "warranty_yrs": specs.get("warranty_power") or 25,
             "technology": specs.get("technology", "Mono PERC"),
             "bifacial": specs.get("bifacial", False),
-            "noct": specs.get("noct", 43),
+            "noct": specs.get("noct") or 43,
         })
 
     with st.spinner("Running comprehensive analysis..."):

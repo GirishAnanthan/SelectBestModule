@@ -181,7 +181,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
         npv = npf.npv(project_params["discount_rate"], fcf_arr)
         if npv is None or (isinstance(npv, float) and np.isnan(npv)):
             npv = 0.0
-        lcoe = total_cost / total_gen
+        lcoe = total_cost / total_gen if total_gen > 0 else 0.0
 
         cum = 0
         payback = None
