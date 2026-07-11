@@ -15,7 +15,10 @@ After extraction, cross-validation enforces:
 import re
 import os
 import io
+import logging
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
