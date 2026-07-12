@@ -218,7 +218,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
         module_capacity_kw = actual_kw
         monthly_data, annual_metrics = compute_monthly_breakdown(
             weather_data, solar_metrics["annual_ghi"], solar_metrics["annual_poa"],
-            {}, gen_y1_kwh, cuf, module_capacity_kw,
+            {}, gen_y1_kwh, cuf, module_capacity_kw, latitude=project_params.get("latitude"),
         )
 
         # Loss breakdown

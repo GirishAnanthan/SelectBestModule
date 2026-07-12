@@ -321,10 +321,11 @@ def compute_bifacial_gain(albedo, mounting_height_m, tilt_angle, ghi_annual, bif
 
 
 def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors,
-                               gen_y1_kwh, cuf, module_capacity_kw):
+                               gen_y1_kwh, cuf, module_capacity_kw, latitude=None):
     """Compute monthly generation, PR, and yield from weather data.
     Returns list of 12 dicts, one per month.
     """
+    import math
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -334,6 +335,13 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
         ghi_monthly = {}
         temp_monthly = {}
 
+    # Build latitude-based seasonal temps if no real data
+    _lat = latitude if latitude is not None else 20.0
+    _mean_temp = max(5.0, min(35.0, 30.0 - 0.5 * abs(_lat)))
+    _est_temps = {}
+    for m_idx in range(12):
+        _est_temps[f"{m_idx+1:02d}"] = round(_mean_temp + 10.0 * math.sin(2 * math.pi * (m_idx - 3) / 12), 1)
+
     ghi_values = [v for v in ghi_monthly.values() if v is not None]
     total_ghi = sum(ghi_values) if ghi_values else annual_ghi
 
@@ -341,11 +349,11 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
     for m_idx in range(12):
         m_key = f"{m_idx+1:02d}"
         m_ghi = ghi_monthly.get(m_key, annual_ghi / 12) if ghi_monthly else annual_ghi / 12
-        m_temp = temp_monthly.get(m_key, 25.0) if temp_monthly else 25.0
+        m_temp = temp_monthly.get(m_key) if temp_monthly else None
+        if m_temp is None:
+            m_temp = _est_temps[m_key]
         if m_ghi is None:
             m_ghi = annual_ghi / 12
-        if m_temp is None:
-            m_temp = 25.0
 
         ghi_frac = m_ghi / total_ghi if total_ghi > 0 else 1 / 12
         m_gen = gen_y1_kwh * ghi_frac
