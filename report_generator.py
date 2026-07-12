@@ -497,15 +497,6 @@ def generate_report(results, project_info, chart_dir, output_path):
             row_gen[i + 1] = f"{gen_val/1e3:,.0f} MWh" if gen_val else "N/A"
         pd_rows.append(row_gen)
 
-    # Specific Yield by mounting type
-    for mt_label in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
-        row_sy = [f"Specific Yield ({mt_label})"] + [""] * n_mods
-        for i, name in enumerate(mod_names):
-            r = results[name]
-            sy_val = r.get("specific_yield_by_mounting", {}).get(mt_label, 0)
-            row_sy[i + 1] = f"{sy_val:,.0f} kWh/kWp" if sy_val else "N/A"
-        pd_rows.append(row_sy)
-
     pd_rows.append(["Mounting Structure"] + [mt] * n_mods)
 
     bifacial_detected = info.get("bifacial_detected", False)
