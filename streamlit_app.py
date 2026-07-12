@@ -84,6 +84,7 @@ html, body, .stApp {{ background: {t['bg']}; color: {t['text']}; font-family: 'M
 .stApp > header {{ display: none; }}
 section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
 .block-container {{ padding: 0 !important; max-width: 1200px !important; }}
+button[key^="nav_back_"] {{ display: none !important; }}
 .solarpro-header {{ display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.5rem; border-bottom: 1px solid {t['border']}; background: {t['bg']}; }}
 .solarpro-brand {{ font-family: 'Playfair Display', serif; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; color: {t['text']}; }}
 .solarpro-brand .sun-mark {{ color: {t['accent']}; font-size: 1rem; }}
@@ -481,8 +482,7 @@ for _si in range(5):
     if _si != step:
         st.button(f"← Step {_si}", key=f"nav_back_{_si}", type="secondary",
                   on_click=lambda s=_si: [setattr(st.session_state, "step", s),
-                                          setattr(st.session_state, "inputs_dirty", True) if s < 4 else None],
-                  visible=False)
+                                          setattr(st.session_state, "inputs_dirty", True) if s < 4 else None])
 
 def _go_back():
     st.session_state.step = st.session_state.step - 1
