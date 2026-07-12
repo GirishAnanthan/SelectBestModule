@@ -893,8 +893,8 @@ def generate_report(results, project_info, chart_dir, output_path):
     # =========================================================
     # STATUTORY COMPLIANCES
     # =========================================================
-    compliances = info.get("compliances", {})
-    STATUTORY_APPROVALS = [
+    compliances = info.get("compliances", {}) or {}
+    DEFAULT_STATUTORY_APPROVALS = [
         ("Environmental Clearance (EC)", "MoEFCC / SEIAA", 90),
         ("Grid Connectivity Approval", "STU / SLDC", 60),
         ("Land Conversion / Use Permission", "District Collector / Revenue Dept", 45),
@@ -914,8 +914,14 @@ def generate_report(results, project_info, chart_dir, output_path):
         ("Electrical Inspector Approval", "Electrical Inspector", 21),
         ("Chief Inspector of Factories NOC", "Factory Inspector", 21),
     ]
+    compliance_items = info.get("compliance_items")
+    if compliance_items is None:
+        compliance_items = [
+            {"id": idx, "approval": approval, "authority": authority, "default_days": default_days}
+            for idx, (approval, authority, default_days) in enumerate(DEFAULT_STATUTORY_APPROVALS)
+        ]
 
-    if compliances:
+    if compliance_items:
         pdf.stitle("Statutory Compliances & Approvals")
         pdf.ptext("Status of all statutory approvals required for establishing the ground-mount solar plant.")
         pdf.ln(1)
@@ -929,8 +935,12 @@ def generate_report(results, project_info, chart_dir, output_path):
         not_started_count = 0
         not_applicable_count = 0
 
-        for idx, (approval, authority, default_days) in enumerate(STATUTORY_APPROVALS):
-            comp = compliances.get(idx, {})
+        for idx, item in enumerate(compliance_items):
+            row_id = item.get("id", idx)
+            comp = compliances.get(row_id, compliances.get(str(row_id), {}))
+            approval = item.get("approval", "")
+            authority = item.get("authority", "")
+            default_days = item.get("default_days", 0)
             actual_days = comp.get("actual_days", default_days)
             status = comp.get("status", "Not Started")
 
@@ -952,7 +962,7 @@ def generate_report(results, project_info, chart_dir, output_path):
             ])
 
         pdf.ln(1)
-        total = len(STATUTORY_APPROVALS)
+        total = len(compliance_items)
         pdf.ptext(
             f"Summary: {completed_count}/{total} Completed, "
             f"{in_progress_count}/{total} In Progress, "

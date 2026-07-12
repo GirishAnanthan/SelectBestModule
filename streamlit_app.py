@@ -198,7 +198,7 @@ for k in ("step",):
 for k,v in {"results":None,"chart_paths":None,"project_info":None,"mod_list":None,
             "weather_data":None,"project_params":None,"module_specs_list":[],
             "module_pdf_bytes":{},"module_filenames":{},
-            "compliances":{},"_n_mod":2,
+            "compliances":{},"compliance_items":None,"compliance_next_id":0,"_n_mod":2,
             "report_generated":False}.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -583,51 +583,102 @@ elif step == 4:
         ("Chief Inspector of Factories NOC", "Factory Inspector", 21),
     ]
 
-    # Load saved compliances
-    saved_compliances = st.session_state.get("compliances", {})
+    # Load saved items/statuses. Row IDs are stable so edits/deletes do not scramble statuses.
+    saved_compliances = st.session_state.get("compliances", {}) or {}
+    if st.session_state.get("compliance_items") is None:
+        st.session_state.compliance_items = [
+            {"id": idx, "approval": approval, "authority": authority, "default_days": default_days}
+            for idx, (approval, authority, default_days) in enumerate(STATUTORY_APPROVALS)
+        ]
+        st.session_state.compliance_next_id = len(st.session_state.compliance_items)
 
-    comp_data = []
-    for idx, (approval, authority, default_days) in enumerate(STATUTORY_APPROVALS):
-        saved = saved_compliances.get(idx, {})
-        comp_data.append({
-            "approval": approval,
-            "authority": authority,
-            "default_days": default_days,
-            "actual_days": saved.get("actual_days", default_days),
-            "status": saved.get("status", "Not Started"),
-        })
+    comp_data = st.session_state.get("compliance_items", []) or []
+    status_options = ["Not Started", "Under Progress", "Completed", "Not Applicable"]
+
+    # Add new approval item
+    with st.expander("Add new statutory approval", expanded=False):
+        with st.form("add_compliance_item", clear_on_submit=True):
+            nc1, nc2, nc3 = st.columns([3.0, 2.0, 1.0])
+            with nc1:
+                new_approval = st.text_input("Statutory Approval")
+            with nc2:
+                new_authority = st.text_input("Issuing Authority")
+            with nc3:
+                new_days = st.number_input("Approx. Days", 0, 365, 30, 5)
+            add_item = st.form_submit_button("Add Item", type="primary")
+            if add_item:
+                if not new_approval.strip():
+                    st.warning("Enter a statutory approval description before adding.")
+                else:
+                    next_id = int(st.session_state.get("compliance_next_id", len(comp_data)))
+                    comp_data.append({
+                        "id": next_id,
+                        "approval": new_approval.strip(),
+                        "authority": new_authority.strip(),
+                        "default_days": int(new_days),
+                    })
+                    saved_compliances[next_id] = {"actual_days": int(new_days), "status": "Not Started"}
+                    st.session_state.compliance_items = comp_data
+                    st.session_state.compliances = saved_compliances
+                    st.session_state.compliance_next_id = next_id + 1
+                    st.session_state.inputs_dirty = True
+                    st.rerun()
 
     # Display as editable table
-    comp_headers = ["Statutory Approval", "Issuing Authority", "Approx. Days", "Expected Days", "Status"]
-    col_widths = [3.0, 2.0, 1.0, 1.0, 1.2]
+    comp_headers = ["Statutory Approval", "Issuing Authority", "Approx. Days", "Expected Days", "Status", "Delete"]
+    col_widths = [3.0, 2.0, 1.0, 1.0, 1.3, 0.7]
 
     # Use columns for header
-    h1, h2, h3, h4, h5 = st.columns(col_widths)
+    h1, h2, h3, h4, h5, h6 = st.columns(col_widths)
     with h1: st.markdown(f"**{comp_headers[0]}**")
     with h2: st.markdown(f"**{comp_headers[1]}**")
     with h3: st.markdown(f"**{comp_headers[2]}**")
     with h4: st.markdown(f"**{comp_headers[3]}**")
     with h5: st.markdown(f"**{comp_headers[4]}**")
+    with h6: st.markdown(f"**{comp_headers[5]}**")
 
     st.markdown(f"<hr style='border:1px solid {t['border']};margin:0.3rem 0'>", unsafe_allow_html=True)
 
     new_compliances = {}
+    new_items = []
     for idx, item in enumerate(comp_data):
-        c1, c2, c3, c4, c5 = st.columns(col_widths)
+        row_id = int(item.get("id", idx))
+        saved = saved_compliances.get(row_id, saved_compliances.get(str(row_id), {})) or {}
+        c1, c2, c3, c4, c5, c6 = st.columns(col_widths)
         with c1:
-            st.markdown(f"<span style='font-size:0.75rem;color:{t['text']}'>{item['approval']}</span>", unsafe_allow_html=True)
+            approval = st.text_input("Approval", item.get("approval", ""), key=f"comp_approval_{row_id}", label_visibility="collapsed")
         with c2:
-            st.markdown(f"<span style='font-size:0.7rem;color:{t['muted']}'>{item['authority']}</span>", unsafe_allow_html=True)
+            authority = st.text_input("Authority", item.get("authority", ""), key=f"comp_authority_{row_id}", label_visibility="collapsed")
         with c3:
-            st.markdown(f"<span style='font-size:0.75rem;color:{t['text']}'>{item['default_days']} days</span>", unsafe_allow_html=True)
+            default_days = st.number_input("Approx. Days", 0, 365, int(item.get("default_days", 0)), 5, key=f"comp_default_days_{row_id}", label_visibility="collapsed")
         with c4:
-            actual = st.number_input("Days", 0, 365, int(item['actual_days']), 5, key=f"comp_days_{idx}", label_visibility="collapsed")
+            actual = st.number_input("Expected Days", 0, 365, int(saved.get("actual_days", item.get("default_days", 0))), 5, key=f"comp_days_{row_id}", label_visibility="collapsed")
         with c5:
-            status = st.selectbox("Status", ["Not Started", "Under Progress", "Completed", "Not Applicable"],
-                                  index=["Not Started", "Under Progress", "Completed", "Not Applicable"].index(item['status']),
-                                  key=f"comp_status_{idx}", label_visibility="collapsed")
-        new_compliances[idx] = {"actual_days": actual, "status": status}
+            saved_status = saved.get("status", "Not Started")
+            if saved_status not in status_options:
+                saved_status = "Not Started"
+            status = st.selectbox("Status", status_options,
+                                  index=status_options.index(saved_status),
+                                  key=f"comp_status_{row_id}", label_visibility="collapsed")
+        with c6:
+            delete_item = st.button("Delete", key=f"comp_delete_{row_id}", type="secondary")
+        if delete_item:
+            saved_compliances.pop(row_id, None)
+            saved_compliances.pop(str(row_id), None)
+            st.session_state.compliance_items = [x for x in comp_data if int(x.get("id", -1)) != row_id]
+            st.session_state.compliances = saved_compliances
+            st.session_state.inputs_dirty = True
+            st.rerun()
 
+        new_items.append({
+            "id": row_id,
+            "approval": approval,
+            "authority": authority,
+            "default_days": int(default_days),
+        })
+        new_compliances[row_id] = {"actual_days": int(actual), "status": status}
+
+    st.session_state.compliance_items = new_items
     st.session_state.compliances = new_compliances
 
     # Summary
@@ -1017,6 +1068,7 @@ elif step == 5:
     p_info.update(spec_rows=spec_rows, project_params=plist, mod_info=mod_info)
     p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
     p_info["compliances"] = st.session_state.get("compliances", {})
+    p_info["compliance_items"] = st.session_state.get("compliance_items", [])
 
     try:
         with tempfile.TemporaryDirectory() as report_dir:
