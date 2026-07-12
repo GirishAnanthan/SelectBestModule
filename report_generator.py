@@ -571,12 +571,6 @@ def generate_report(results, project_info, chart_dir, output_path):
                        [f"{results[n]['cuf']*100:.1f}%" for n in mod_names] +
                        [""])
 
-        # Annual Generation by mounting type
-        for mt_label in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
-            pv_rows.append([f"Annual Gen ({mt_label})"] +
-                           [f"{results[n].get('gen_by_mounting', {}).get(mt_label, 0)/1e3:,.0f}" for n in mod_names] +
-                           ["MWh"])
-
         # Specific Yield by mounting type
         for mt_label in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
             pv_rows.append([f"Specific Yield ({mt_label})"] +
