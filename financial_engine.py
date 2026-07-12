@@ -517,12 +517,15 @@ def _make_loss_diagram(loss_series, module_name, fn):
     import plotly.io as pio
     labels = ["POA Irradiance"]
     values = [100.0]
+    texts = ["100.0%"]
     for name, pct, cumulative in loss_series:
         labels.append(name.replace("\n", " "))
-        values.append(pct)
+        values.append(-abs(pct))
+        texts.append(f"-{abs(pct):.1f}%")
     labels.append("Grid Injection")
     final_val = loss_series[-1][2] if loss_series else 100.0
-    values.append(final_val)
+    values.append(0)
+    texts.append(f"{final_val:.1f}%")
 
     measure = ["absolute"] + ["relative"] * (len(values) - 2) + ["total"]
 
@@ -531,7 +534,7 @@ def _make_loss_diagram(loss_series, module_name, fn):
         measure=measure,
         x=labels,
         y=values,
-        text=[f"{v:.1f}%" for v in values],
+        text=texts,
         textposition="outside",
         connector=dict(line=dict(color="gray", width=1, dash="dot")),
         increasing=dict(marker=dict(color="#2ecc71")),
