@@ -815,24 +815,25 @@ elif step == 5:
             else:
                 st.stop()
         
-        with st.spinner("Running comprehensive analysis..."):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                if _offline_mode:
-                    weather_data = None
-                elif ws == "api":
-                    weather_data = cached_nasa(latitude, longitude)
-                elif ws == "pvgis":
-                    weather_data = cached_pvgis(latitude, longitude)
-                else:
-                    weather_data = None
-                results, chart_paths = run_analysis(mod_list, project_params, tmpdir, weather_data=weather_data)
+        try:
+            with st.spinner("Running comprehensive analysis..."):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    if _offline_mode:
+                        weather_data = None
+                    elif ws == "api":
+                        weather_data = cached_nasa(latitude, longitude)
+                    elif ws == "pvgis":
+                        weather_data = cached_pvgis(latitude, longitude)
+                    else:
+                        weather_data = None
+                    results, chart_paths = run_analysis(mod_list, project_params, tmpdir, weather_data=weather_data)
 
-                _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
-                          "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
-                _wsum = sum(_raw_w.values()) or 1
-                weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
-                scored = compute_scores(results, mod_list, weights)
-                mod_names = [m["short"] for m in mod_list]
+                    _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
+                              "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
+                    _wsum = sum(_raw_w.values()) or 1
+                    weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
+                    scored = compute_scores(results, mod_list, weights)
+                    mod_names = [m["short"] for m in mod_list]
 
                 # store in session
                 st.session_state.results = results
@@ -862,6 +863,22 @@ elif step == 5:
                         _persistent_paths[cname] = _dest
                 chart_paths = _persistent_paths
                 st.session_state.chart_paths = chart_paths
+        except Exception as _analysis_err:
+            st.error(f"**Analysis failed:** {_analysis_err}")
+            st.markdown("""
+            <div style="background:#1a1a2e;border:1px solid #e74c3c40;border-radius:8px;padding:1.2rem;margin:1rem 0;">
+                <p style="color:#e8edf2;font-size:0.85rem;margin:0 0 0.5rem;">
+                    The analysis could not complete. Please check your inputs and try again.
+                </p>
+                <p style="color:#7a9bb5;font-size:0.75rem;margin:0;">
+                    <strong>Common causes:</strong> Invalid financial parameters, weather data issues, or module specification errors.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("← Back to Edit Inputs", type="secondary"):
+                st.session_state.inputs_dirty = True
+                st.rerun()
+            st.stop()
 
     # ---- RESULTS DISPLAY ----
     st.success("Analysis complete")
@@ -999,27 +1016,31 @@ elif step == 5:
     p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
     p_info["compliances"] = st.session_state.get("compliances", {})
 
-    with tempfile.TemporaryDirectory() as report_dir:
-        # Copy charts into report_dir so report_generator can find them
-        _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
-        if os.path.isdir(_charts_dir):
-            import shutil
-            for f in os.listdir(_charts_dir):
-                if f.endswith(".png"):
-                    shutil.copy2(os.path.join(_charts_dir, f), os.path.join(report_dir, f))
+    try:
+        with tempfile.TemporaryDirectory() as report_dir:
+            # Copy charts into report_dir so report_generator can find them
+            _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
+            if os.path.isdir(_charts_dir):
+                import shutil
+                for f in os.listdir(_charts_dir):
+                    if f.endswith(".png"):
+                        shutil.copy2(os.path.join(_charts_dir, f), os.path.join(report_dir, f))
 
-        report_path = os.path.join(report_dir, "investment_report.pdf")
-        gen_report(results, p_info, report_dir, report_path)
+            report_path = os.path.join(report_dir, "investment_report.pdf")
+            gen_report(results, p_info, report_dir, report_path)
 
-        name_parts = []
-        for i in range(len(module_specs_list)):
-            mfr = _get_mfr_name(module_specs_list[i], i)
-            name_parts.append(mfr.replace("/","_").replace("\\","_").split()[0])
-        report_fn = f"SolarPro_Report_{'_vs_'.join(name_parts)}.pdf"
+            name_parts = []
+            for i in range(len(module_specs_list)):
+                mfr = _get_mfr_name(module_specs_list[i], i)
+                name_parts.append(mfr.replace("/","_").replace("\\","_").split()[0])
+            report_fn = f"SolarPro_Report_{'_vs_'.join(name_parts)}.pdf"
 
-        with open(report_path, "rb") as f:
-            st.download_button("Download Investment-Grade PDF Report", data=f.read(),
-                               file_name=report_fn, mime="application/pdf", type="primary")
+            with open(report_path, "rb") as f:
+                st.download_button("Download Investment-Grade PDF Report", data=f.read(),
+                                   file_name=report_fn, mime="application/pdf", type="primary")
+    except Exception as _report_err:
+        st.error(f"**Report generation failed:** {_report_err}")
+        st.info("Your analysis results are still available. Try refreshing the page or going back to edit inputs.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
