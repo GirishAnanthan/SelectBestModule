@@ -417,8 +417,17 @@ elif step == 1:
                     specs.update(vmp=vmp, imp=imp, voc=voc, efficiency_pct=eff, temp_coeff_pmax=-tc, deg_y1_pct=deg_y1, deg_annual_pct=deg_ann, noct=noct, warranty_power=pw)
                     st.caption(f"Extracted via {specs.get('_extraction_method','N/A')}")
             else:
-                st.info(f"Upload datasheet")
-                specs = None
+                # Show previously uploaded module info if available
+                if existing:
+                    brand = existing.get("brand", existing.get("_filename", f"Module {i+1}"))
+                    wp = existing.get("power_wp", "?")
+                    st.markdown(f"""<div style="background:{t['card']};border:1px solid {t['accent']}40;border-radius:6px;padding:0.5rem 0.7rem;margin-top:0.3rem">
+                        <span style="font-size:0.75rem;font-weight:600;color:{t['accent']}">{brand}</span>
+                        <span style="font-size:0.7rem;color:{t['text']};margin-left:0.4rem">{wp} Wp</span>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.info(f"Upload datasheet")
+                specs = existing if existing else None
             module_specs_list.append(specs)
 
     st.session_state.module_specs_list = module_specs_list
