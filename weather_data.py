@@ -325,7 +325,6 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
     """Compute monthly generation, PR, and yield from weather data.
     Returns list of 12 dicts, one per month.
     """
-    import math
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 

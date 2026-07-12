@@ -3,19 +3,55 @@ SolarPro-FinModelling | PV Module Financial Intelligence
 Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 """
 import streamlit as st
-import os, io, json, tempfile, sys, re, hashlib
+import os, io, json, tempfile, sys, re, hashlib, time
 import urllib.request
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_DIR)
 
-from pdf_parser import extract_module_specs, format_specs_for_display, extract_text_from_pdf, parse_specs
-from financial_engine import run_analysis
-from report_generator import generate_report as gen_report
-from scoring import compute_scores, get_default_weights, format_scoring_table
-from weather_data import fetch_nasa_power_monthly, fetch_pvgis_monthly, compute_annual_solar_metrics, get_weather_summary
-from currency import currency_options, code_from_option, get_currency, make_formatter
+
+def _retry_import(retries=3, delay=1.0):
+    """Retry import loop that clears corrupted module cache and retries."""
+    for attempt in range(retries):
+        try:
+            import pdf_parser
+            import financial_engine
+            import report_generator
+            import scoring
+            import weather_data
+            import currency
+            return pdf_parser, financial_engine, report_generator, scoring, weather_data, currency
+        except (KeyError, ImportError, ModuleNotFoundError) as e:
+            if attempt < retries - 1:
+                time.sleep(delay)
+                for m in list(sys.modules):
+                    if m in ("pdf_parser", "financial_engine", "report_generator",
+                             "scoring", "weather_data", "currency"):
+                        del sys.modules[m]
+            else:
+                raise
+
+
+_pdf_parser, _financial_engine, _report_generator, _scoring, _weather_data, _currency = _retry_import()
+
+extract_module_specs = _pdf_parser.extract_module_specs
+format_specs_for_display = _pdf_parser.format_specs_for_display
+extract_text_from_pdf = _pdf_parser.extract_text_from_pdf
+parse_specs = _pdf_parser.parse_specs
+run_analysis = _financial_engine.run_analysis
+gen_report = _report_generator.generate_report
+compute_scores = _scoring.compute_scores
+get_default_weights = _scoring.get_default_weights
+format_scoring_table = _scoring.format_scoring_table
+fetch_nasa_power_monthly = _weather_data.fetch_nasa_power_monthly
+fetch_pvgis_monthly = _weather_data.fetch_pvgis_monthly
+compute_annual_solar_metrics = _weather_data.compute_annual_solar_metrics
+get_weather_summary = _weather_data.get_weather_summary
+currency_options = _currency.currency_options
+code_from_option = _currency.code_from_option
+get_currency = _currency.get_currency
+make_formatter = _currency.make_formatter
 
 
 def _check_internet():
