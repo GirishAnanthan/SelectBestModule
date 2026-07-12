@@ -102,14 +102,14 @@ section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
 .step-panel {{ padding: 1.5rem; }}
 .section-eyebrow {{ font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['accent']}; letter-spacing: 0.12em; }}
 .section-heading h2 {{ font-family: 'Playfair Display', serif; font-size: 1.3rem; color: {t['heading']}; margin: 0.2rem 0; }}
-.section-heading p {{ font-size: 0.75rem; color: {t['muted']}; margin: 0 0 1.2rem; }}
+.section-heading p {{ font-size: 0.75rem; color: {t['text']}; margin: 0 0 1.2rem; opacity: 0.7; }}
 .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea textarea {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.4rem 0.7rem !important; }}
 .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {{ border-color: {t['accent']} !important; box-shadow: 0 0 0 1px {t['accent']} !important; }}
 .stSelectbox>div>div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; }}
-label {{ color: {t['muted']} !important; font-size: 0.75rem !important; }}
+label {{ color: {t['text']} !important; font-size: 0.75rem !important; font-weight: 500 !important; }}
 .stRadio>div {{ flex-direction: row !important; gap: 0.4rem !important; }}
-.stRadio>div label {{ background: {t['card']} !important; padding: 0.2rem 0.7rem !important; border-radius: 5px !important; border: 1px solid {t['border']} !important; font-size: 0.7rem !important; }}
-div[data-testid="stMarkdownContainer"] p {{ font-size: 0.8rem; color: {t['muted']}; }}
+.stRadio>div label {{ background: {t['card']} !important; padding: 0.2rem 0.7rem !important; border-radius: 5px !important; border: 1px solid {t['border']} !important; font-size: 0.7rem !important; color: {t['text']} !important; }}
+div[data-testid="stMarkdownContainer"] p {{ font-size: 0.8rem; color: {t['text']}; }}
 .stSlider>div>div>div {{ background: {t['dim']} !important; }}
 div[data-testid="stThumb"] {{ background: {t['accent']} !important; }}
 .mod-card {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 10px; padding: 1rem; margin-bottom: 0.8rem; }}
@@ -117,18 +117,18 @@ div[data-testid="stThumb"] {{ background: {t['accent']} !important; }}
 .mod-card h4 {{ font-size: 0.8rem; color: {t['text']}; margin: 0 0 0.5rem; display: flex; align-items: center; gap: 0.5rem; }}
 .mod-card .tag {{ font-size: 0.55rem; background: {t['accent']}20; color: {t['accent']}; padding: 0.1rem 0.4rem; border-radius: 3px; letter-spacing: 0.04em; }}
 .stButton>button, div[data-testid="stDownloadButton"]>button {{ background: linear-gradient(135deg,{t['accent']},{t['accent2']}) !important; color: {t['bg']} !important; border: none !important; font-weight: 600 !important; padding: 0.4rem 1.2rem !important; border-radius: 6px !important; font-size: 0.78rem !important; }}
-.stButton>button[kind="secondary"] {{ background: transparent !important; color: {t['muted']} !important; border: 1px solid {t['border']} !important; }}
+.stButton>button[kind="secondary"] {{ background: transparent !important; color: {t['text']} !important; border: 1px solid {t['border']} !important; }}
 .stButton>button[kind="secondary"]:hover {{ border-color: {t['accent']} !important; color: {t['accent']} !important; }}
 div[data-testid="metric-container"] {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 8px; padding: 0.7rem; }}
-div[data-testid="metric-container"] > div:first-child {{ color: {t['muted']} !important; font-size: 0.65rem !important; }}
+div[data-testid="metric-container"] > div:first-child {{ color: {t['text']} !important; font-size: 0.65rem !important; font-weight: 500 !important; }}
 div[data-testid="metric-container"] > div:nth-child(2) {{ font-size: 1.2rem !important; font-weight: 700 !important; color: {t['accent']} !important; }}
 .stTable table {{ background: {t['card']} !important; }}
 .stTable th {{ background: {t['dim']}40 !important; color: {t['text']} !important; font-size: 0.65rem !important; }}
-.stTable td {{ color: {t['muted']} !important; font-size: 0.7rem !important; }}
+.stTable td {{ color: {t['text']} !important; font-size: 0.7rem !important; }}
 .wiz-actions {{ display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; border-top: 1px solid {t['border']}; background: {t['bg']}; }}
 .stAlert {{ border-radius: 6px !important; font-size: 0.75rem !important; }}
-.st-cb {{ color: {t['muted']} !important; }}
-.st-b8 {{ color: {t['muted']} !important; }}
+.st-cb {{ color: {t['text']} !important; }}
+.st-b8 {{ color: {t['text']} !important; }}
 @media (max-width:768px){{ .form-grid, .form-grid.three {{ grid-template-columns: 1fr; }} }}
 footer {{ display: none; }}
 </style>
