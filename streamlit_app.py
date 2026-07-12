@@ -3,7 +3,7 @@ SolarPro-FinModelling | PV Module Financial Intelligence
 Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 """
 import streamlit as st
-import os, io, json, tempfile, sys, re, hashlib, time, uuid, traceback
+import os, io, json, tempfile, sys, re, hashlib, time, uuid, traceback, html
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,20 +43,21 @@ def _retry_import(retries=3, delay=1.0):
             import scoring
             import weather_data
             import currency
-            return pdf_parser, financial_engine, report_generator, scoring, weather_data, currency
+            import language
+            return pdf_parser, financial_engine, report_generator, scoring, weather_data, currency, language
         except (KeyError, ImportError, ModuleNotFoundError) as e:
             _log_app_error("import_retry", e, {"attempt": attempt + 1, "max_attempts": retries})
             if attempt < retries - 1:
                 time.sleep(delay)
                 for m in list(sys.modules):
                     if m in ("pdf_parser", "financial_engine", "report_generator",
-                             "scoring", "weather_data", "currency"):
+                             "scoring", "weather_data", "currency", "language"):
                         del sys.modules[m]
             else:
                 raise
 
 
-_pdf_parser, _financial_engine, _report_generator, _scoring, _weather_data, _currency = _retry_import()
+_pdf_parser, _financial_engine, _report_generator, _scoring, _weather_data, _currency, _language = _retry_import()
 
 extract_module_specs = _pdf_parser.extract_module_specs
 format_specs_for_display = _pdf_parser.format_specs_for_display
@@ -75,6 +76,10 @@ currency_options = _currency.currency_options
 code_from_option = _currency.code_from_option
 get_currency = _currency.get_currency
 make_formatter = _currency.make_formatter
+language_options = _language.language_options
+code_from_language_option = _language.code_from_language_option
+get_language = _language.get_language
+translate_text = _language.translate_text
 
 st.set_page_config(page_title="SolarPro | PV Module Financial Intelligence", page_icon="☀️", layout="wide")
 
@@ -234,6 +239,93 @@ if "report_generated" not in st.session_state:
     st.session_state.report_generated = False
 if "inputs_dirty" not in st.session_state:
     st.session_state.inputs_dirty = False
+if "language_code" not in st.session_state:
+    st.session_state.language_code = "en"
+
+
+def tr(text):
+    return translate_text(text, st.session_state.get("language_code", "en"))
+
+
+def tr_html(text):
+    return html.escape(tr(text), quote=False)
+
+
+def section_heading(eyebrow, title, desc):
+    st.markdown(f"""
+<div class="section-heading">
+    <div class="section-eyebrow">{tr_html(eyebrow)}</div>
+    <h2>{tr_html(title)}</h2>
+    <p>{tr_html(desc)}</p>
+</div>
+""", unsafe_allow_html=True)
+
+
+def _language_index():
+    current = st.session_state.get("language_code", "en")
+    options = language_options()
+    for idx, option in enumerate(options):
+        if code_from_language_option(option) == current:
+            return idx
+    return 0
+
+
+def _apply_language_option(option):
+    selected_code = code_from_language_option(option)
+    if selected_code != st.session_state.get("language_code", "en"):
+        st.session_state.language_code = selected_code
+        st.rerun()
+
+
+def _format_translated_option(option):
+    return tr(option) if isinstance(option, str) else str(option)
+
+
+def _translate_first_arg(func, option_display=False, markdown=False, metric=False):
+    def wrapped(*args, **kwargs):
+        args = list(args)
+        if args and isinstance(args[0], str):
+            if not markdown or not kwargs.get("unsafe_allow_html", False):
+                args[0] = tr(args[0])
+        if metric:
+            return func(*args, **kwargs)
+        if option_display and st.session_state.get("language_code", "en") != "en" and "format_func" not in kwargs:
+            kwargs["format_func"] = _format_translated_option
+        return func(*args, **kwargs)
+    return wrapped
+
+
+def _install_translation_wrappers():
+    if getattr(st, "_solarpro_i18n_wrapped", False):
+        return
+    for name in (
+        "text_input", "number_input", "slider", "button", "download_button",
+        "warning", "error", "info", "success", "caption", "checkbox",
+        "file_uploader", "popover", "expander", "spinner", "text_area",
+    ):
+        if hasattr(st, name):
+            setattr(st, name, _translate_first_arg(getattr(st, name)))
+    for name in ("radio", "selectbox", "multiselect"):
+        if hasattr(st, name):
+            setattr(st, name, _translate_first_arg(getattr(st, name), option_display=True))
+    if hasattr(st, "markdown"):
+        st.markdown = _translate_first_arg(st.markdown, markdown=True)
+    if hasattr(st, "metric"):
+        st.metric = _translate_first_arg(st.metric, metric=True)
+    st._solarpro_i18n_wrapped = True
+
+
+_install_translation_wrappers()
+
+
+if st.session_state.language_code in {"ar", "fa", "iw", "ur", "ug", "ckb", "dv", "ps", "sd"}:
+    st.markdown("""
+<style>
+.stApp { direction: rtl; }
+.solarpro-header, .step-nav, .wiz-actions { direction: ltr; }
+label, div[data-testid="stMarkdownContainer"], div[data-testid="stWidgetLabel"] { text-align: right; }
+</style>
+""", unsafe_allow_html=True)
 
 STEP_NAMES = ["Project", "Modules", "Priorities", "Finance", "Compliances", "Report"]
 STEP_EYEBROWS = ["01 / PROJECT BRIEF", "02 / CANDIDATE MODULES", "03 / DECISION PRIORITIES",
@@ -263,21 +355,31 @@ def _go_forward():
 # THEME SELECTION SCREEN (shown on first visit)
 # ---------------------------------------------------------------------------
 if not st.session_state.theme:
+    startup_language = st.selectbox(
+        "World Languages",
+        language_options(),
+        index=_language_index(),
+        key="startup_language",
+        format_func=str,
+    )
+    _apply_language_option(startup_language)
+    st.caption("Choose your language first, then choose a theme. You can change both later from Settings.")
+
     st.markdown(f"""
 <div class="solarpro-header" style="background:{THEMES['Midnight Ocean']['bg']}">
     <div class="solarpro-brand" style="color:{THEMES['Midnight Ocean']['text']}">
         <span class="sun-mark" style="color:{THEMES['Midnight Ocean']['accent']}">&#9728;</span>
         <span>SOLAR<span style="color:{THEMES['Midnight Ocean']['link']}">PRO</span></span>
     </div>
-    <div class="solarpro-tag" style="color:{THEMES['Midnight Ocean']['muted']}">THEME SETUP</div>
+    <div class="solarpro-tag" style="color:{THEMES['Midnight Ocean']['muted']}">{tr_html('THEME SETUP')}</div>
 </div>
 """, unsafe_allow_html=True)
 
     st.markdown(f"""
 <div style="padding:1.5rem;background:{THEMES['Midnight Ocean']['bg']}">
-    <div style="font-family:'Playfair Display',serif;font-size:1.6rem;color:{THEMES['Midnight Ocean']['heading']}">Choose Your Theme</div>
+    <div style="font-family:'Playfair Display',serif;font-size:1.6rem;color:{THEMES['Midnight Ocean']['heading']}">{tr_html('Choose Your Theme')}</div>
     <p style="font-size:0.85rem;color:{THEMES['Midnight Ocean']['muted']};margin:0.3rem 0 1.5rem">
-        Select a visual theme for SolarPro. You can change this later from Settings.
+        {tr_html('Select a visual theme for SolarPro. You can change this later from Settings.')}
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -318,15 +420,39 @@ t = _get_theme()
 st.markdown(f"""
 <div class="solarpro-header">
     <div class="solarpro-brand"><span class="sun-mark">&#9728;</span><span>SOLAR<span>PRO</span></span></div>
-    <div class="solarpro-tag"><span class="dot"></span>PV Module Financial Intelligence</div>
+    <div class="solarpro-tag"><span class="dot"></span>{tr_html('PV Module Financial Intelligence')}</div>
 </div>
 """, unsafe_allow_html=True)
+
+lang_col, theme_hint_col = st.columns([1.2, 2.8])
+with lang_col:
+    selected_page_language = st.selectbox(
+        "World Languages",
+        language_options(),
+        index=_language_index(),
+        key="page_language",
+        format_func=str,
+    )
+    _apply_language_option(selected_page_language)
+with theme_hint_col:
+    st.caption("Select your preferred language here. The app will translate the interface automatically.")
 
 # ---------------------------------------------------------------------------
 # SIDEBAR - Theme Switcher
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown(f"<p style='font-size:0.7rem;color:{t['muted']};margin-bottom:0.5rem'>THEME</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='font-size:0.7rem;color:{t['muted']};margin-bottom:0.5rem'>{tr_html('WORLD LANGUAGES')}</p>", unsafe_allow_html=True)
+    selected_language = st.selectbox(
+        "App language",
+        language_options(),
+        index=_language_index(),
+        key="sidebar_language",
+        label_visibility="collapsed",
+        format_func=str,
+    )
+    _apply_language_option(selected_language)
+
+    st.markdown(f"<p style='font-size:0.7rem;color:{t['muted']};margin:1rem 0 0.5rem'>{tr_html('THEME')}</p>", unsafe_allow_html=True)
     theme_options = list(THEMES.keys())
     current_idx = theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0
     selected_theme = st.selectbox("Theme", theme_options, index=current_idx, key="sidebar_theme", label_visibility="collapsed")
@@ -359,8 +485,8 @@ step = st.session_state.step
 st.markdown(f"""
 <div class="step-nav">
     <div>
-        <span class="step-label">{STEP_EYEBROWS[step]}</span>
-        <span class="step-desc">{STEP_DESCS[step]}</span>
+        <span class="step-label">{tr_html(STEP_EYEBROWS[step])}</span>
+        <span class="step-desc">{tr_html(STEP_DESCS[step])}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -397,7 +523,11 @@ DEFAULT_TECHS = ["Mono PERC", "N-TOPCon", "HJT", "Mono PERC", "Poly PERC"]
 # ======================================================================
 if step == 0:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    st.markdown('<div class="section-heading"><div class="section-eyebrow">01 — PROJECT BRIEF</div><h2>Frame the solar asset.</h2><p>These inputs anchor energy-yield assumptions and scale commercial comparison.</p></div>', unsafe_allow_html=True)
+    section_heading(
+        "01 - PROJECT BRIEF",
+        "Frame the solar asset.",
+        "These inputs anchor energy-yield assumptions and scale commercial comparison.",
+    )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -421,7 +551,11 @@ if step == 0:
 # ======================================================================
 elif step == 1:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    st.markdown('<div class="section-heading"><div class="section-eyebrow">02 — CANDIDATE MODULES</div><h2>Bring the contenders.</h2><p>Upload PDF datasheets; specs are auto-extracted and editable below.</p></div>', unsafe_allow_html=True)
+    section_heading(
+        "02 - CANDIDATE MODULES",
+        "Bring the contenders.",
+        "Upload PDF datasheets; specs are auto-extracted and editable below.",
+    )
 
     # Restore n_modules from session state if available
     saved_n = st.session_state.get("module_specs_list", [])
@@ -524,7 +658,7 @@ elif step == 1:
                     st.info(f"Upload datasheet")
                 specs = existing if existing else None
 
-            final_label = f"Module {i+1}"
+            final_label = f"{tr('Module')} {i+1}"
             if specs and specs.get("brand"):
                 final_label = f"{specs.get('brand')} - {specs.get('power_wp', '?')} Wp"
                 
@@ -542,7 +676,11 @@ elif step == 1:
 # ======================================================================
 elif step == 2:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    st.markdown('<div class="section-heading"><div class="section-eyebrow">03 — DECISION PRIORITIES</div><h2>Weight what matters.</h2><p>Weights directly drive the composite ranking. They are normalised automatically.</p></div>', unsafe_allow_html=True)
+    section_heading(
+        "03 - DECISION PRIORITIES",
+        "Weight what matters.",
+        "Weights directly drive the composite ranking. They are normalised automatically.",
+    )
 
     default_w = get_default_weights()
     c1, c2 = st.columns(2)
@@ -565,7 +703,11 @@ elif step == 2:
 # ======================================================================
 elif step == 3:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    st.markdown('<div class="section-heading"><div class="section-eyebrow">04 — ECONOMIC CASE</div><h2>Model the investment.</h2><p>Enter costs, tariff and financing terms.</p></div>', unsafe_allow_html=True)
+    section_heading(
+        "04 - ECONOMIC CASE",
+        "Model the investment.",
+        "Enter costs, tariff and financing terms.",
+    )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -604,7 +746,11 @@ elif step == 3:
 # ======================================================================
 elif step == 4:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    st.markdown('<div class="section-heading"><div class="section-eyebrow">05 — STATUTORY COMPLIANCES</div><h2>Track approvals.</h2><p>Capture status and timelines for all statutory clearances required for a ground-mount solar plant.</p></div>', unsafe_allow_html=True)
+    section_heading(
+        "05 - STATUTORY COMPLIANCES",
+        "Track approvals.",
+        "Capture status and timelines for all statutory clearances required for a ground-mount solar plant.",
+    )
 
     STATUTORY_APPROVALS = [
         ("Environmental Clearance (EC)", "MoEFCC / SEIAA", 90),
@@ -719,10 +865,10 @@ elif step == 4:
     pending = total - completed - in_progress - not_applicable
 
     st.markdown(f"""<div style="display:flex;gap:1rem;padding:0.8rem 0;font-size:0.75rem">
-        <span style="color:{t['success']}">&#9679; Completed: {completed}/{total}</span>
-        <span style="color:{t['accent']}">&#9679; In Progress: {in_progress}/{total}</span>
-        <span style="color:{t['dim']}">&#9679; Not Started: {pending}/{total}</span>
-        <span style="color:{t['muted']}">&#9679; Not Applicable: {not_applicable}/{total}</span>
+        <span style="color:{t['success']}">&#9679; {tr_html('Completed')}: {completed}/{total}</span>
+        <span style="color:{t['accent']}">&#9679; {tr_html('In Progress')}: {in_progress}/{total}</span>
+        <span style="color:{t['dim']}">&#9679; {tr_html('Not Started')}: {pending}/{total}</span>
+        <span style="color:{t['muted']}">&#9679; {tr_html('Not Applicable')}: {not_applicable}/{total}</span>
     </div>""", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -834,11 +980,11 @@ elif step == 5:
 
     # Show Generate/Regenerate button if needed
     if not st.session_state.report_generated or st.session_state.inputs_dirty:
-        status_msg = "Regenerate Report" if st.session_state.report_generated else "Ready to Generate Report"
-        detail = "Inputs have been modified since last generation." if st.session_state.inputs_dirty else f"{len(mod_list)} modules configured | {plant_capacity} MW DC | {location}"
+        status_msg = tr("Regenerate Report" if st.session_state.report_generated else "Ready to Generate Report")
+        detail = tr("Inputs have been modified since last generation.") if st.session_state.inputs_dirty else f"{len(mod_list)} {tr('modules configured')} | {plant_capacity} MW DC | {location}"
         st.markdown(f"""<div style="text-align:center;padding:2rem;background:{t['card']};border:1px solid {t['border']};border-radius:10px;margin:1rem 0">
-            <div style="font-family:'Playfair Display',serif;font-size:1.2rem;color:{t['heading']};margin-bottom:0.5rem">{status_msg}</div>
-            <p style="font-size:0.8rem;color:{t['muted']};margin:0">{detail}</p>
+            <div style="font-family:'Playfair Display',serif;font-size:1.2rem;color:{t['heading']};margin-bottom:0.5rem">{html.escape(status_msg, quote=False)}</div>
+            <p style="font-size:0.8rem;color:{t['muted']};margin:0">{html.escape(detail, quote=False)}</p>
         </div>""", unsafe_allow_html=True)
 
         btn_label = "Regenerate Investor-Grade Report" if st.session_state.report_generated else "Generate Investor-Grade Report"
@@ -961,13 +1107,13 @@ elif step == 5:
                 "location": location,
             })
             st.error(f"**Analysis failed:** {_analysis_err}")
-            st.markdown("""
+            st.markdown(f"""
             <div style="background:#1a1a2e;border:1px solid #e74c3c40;border-radius:8px;padding:1.2rem;margin:1rem 0;">
                 <p style="color:#e8edf2;font-size:0.85rem;margin:0 0 0.5rem;">
-                    The analysis could not complete. Please check your inputs and try again.
+                    {tr_html('The analysis could not complete. Please check your inputs and try again.')}
                 </p>
                 <p style="color:#7a9bb5;font-size:0.75rem;margin:0;">
-                    <strong>Common causes:</strong> Invalid financial parameters, weather data issues, or module specification errors.
+                    <strong>{tr_html('Common causes')}:</strong> {tr_html('Invalid financial parameters, weather data issues, or module specification errors.')}
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -987,8 +1133,8 @@ elif step == 5:
             st.metric(f"{name} — IRR", f"{r['irr']*100:.2f}%")
             st.metric(f"{name} — Project Cost", F["money"](r["total_cost"]))
     best = scored[0]["short"] if scored else mod_names[0]
-    score_text = f" (Score: {scored[0]['weighted_total']:.1f}/100)" if scored else ""
-    st.markdown(f"<div style='text-align:center;padding:0.5rem 0;font-size:0.85rem;color:{t['accent']};font-weight:600'>&#10022; Recommended: {best}{score_text}</div>", unsafe_allow_html=True)
+    score_text = f" ({tr('Score')}: {scored[0]['weighted_total']:.1f}/100)" if scored else ""
+    st.markdown(f"<div style='text-align:center;padding:0.5rem 0;font-size:0.85rem;color:{t['accent']};font-weight:600'>&#10022; {tr_html('Recommended')}: {html.escape(str(best), quote=False)}{html.escape(score_text, quote=False)}</div>", unsafe_allow_html=True)
 
     # charts
     st.markdown("### Charts")
@@ -997,12 +1143,13 @@ elif step == 5:
     for i, cn in enumerate(ch_names):
         with ch_cols[i % 2]:
             if os.path.exists(chart_paths[cn]):
-                st.image(chart_paths[cn], caption=cn.replace(".png","").replace("_"," ").title(), width="stretch")
+                st.image(chart_paths[cn], caption=tr(cn.replace(".png","").replace("_"," ").title()), width="stretch")
 
     # scoring table
     st.markdown("### Multi-Criteria Scoring")
     score_headers, score_rows = format_scoring_table(scored)
-    score_df = [dict(zip(score_headers, row)) for row in score_rows]
+    score_headers_ui = [tr(h) for h in score_headers]
+    score_df = [dict(zip(score_headers_ui, row)) for row in score_rows]
     st.table(score_df)
 
     # scenario
@@ -1158,7 +1305,7 @@ with nav_c2:
 
 # Footer with theme switcher
 footer_html = f"""<div style="text-align:center;padding:1.2rem;font-size:0.6rem;color:{t['dim']};font-family:DM Mono,monospace;border-top:1px solid {t['border']}">
-SOLAR<span style="color:{t['link']}">PRO</span> · PV Module Financial Intelligence
-<br><a href="#" onclick="window.parent.document.querySelector('[data-testid=stSidebar]').click();return false;" style="color:{t['accent']};font-size:0.55rem;text-decoration:underline;cursor:pointer">Change Theme</a>
+SOLAR<span style="color:{t['link']}">PRO</span> · {tr_html('PV Module Financial Intelligence')}
+<br><a href="#" onclick="window.parent.document.querySelector('[data-testid=stSidebar]').click();return false;" style="color:{t['accent']};font-size:0.55rem;text-decoration:underline;cursor:pointer">{tr_html('Change Theme')}</a>
 </div>"""
 st.markdown(footer_html, unsafe_allow_html=True)
