@@ -10,6 +10,7 @@ chart_*.png
 fin_results.json
 *_Report_*.pdf
 Comparison_Report_*.pdf
+.chart_cache/
 
 # Sample datasheets (copyrighted by manufacturers)
 *.pdf

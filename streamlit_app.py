@@ -647,6 +647,18 @@ if step == 4:
             st.session_state.weather_data = weather_data
             st.session_state.project_params = project_params
 
+            # Copy charts to persistent location before tmpdir closes
+            _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
+            os.makedirs(_charts_dir, exist_ok=True)
+            _persistent_paths = {}
+            for cname, cpath in chart_paths.items():
+                if os.path.exists(cpath):
+                    _dest = os.path.join(_charts_dir, cname)
+                    import shutil; shutil.copy2(cpath, _dest)
+                    _persistent_paths[cname] = _dest
+            chart_paths = _persistent_paths
+            st.session_state.chart_paths = chart_paths
+
     # ---- RESULTS DISPLAY ----
     st.success("Analysis complete")
 
@@ -783,6 +795,14 @@ if step == 4:
     p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
 
     with tempfile.TemporaryDirectory() as report_dir:
+        # Copy charts into report_dir so report_generator can find them
+        _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
+        if os.path.isdir(_charts_dir):
+            import shutil
+            for f in os.listdir(_charts_dir):
+                if f.endswith(".png"):
+                    shutil.copy2(os.path.join(_charts_dir, f), os.path.join(report_dir, f))
+
         report_path = os.path.join(report_dir, "investment_report.pdf")
         gen_report(results, p_info, report_dir, report_path)
 
