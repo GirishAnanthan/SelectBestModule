@@ -907,6 +907,72 @@ def generate_report(results, project_info, chart_dir, output_path):
         )
 
     # =========================================================
+    # STATUTORY COMPLIANCES
+    # =========================================================
+    compliances = info.get("compliances", {})
+    STATUTORY_APPROVALS = [
+        ("Environmental Clearance (EC)", "MoEFCC / SEIAA", 90),
+        ("Grid Connectivity Approval", "STU / SLDC", 60),
+        ("Land Conversion / Use Permission", "District Collector / Revenue Dept", 45),
+        ("Forest Clearance (if applicable)", "MoEFCC / State Forest Dept", 120),
+        ("Water Availability / NOC", "State Water Board / Irrigation Dept", 30),
+        ("Fire Safety NOC", "State Fire Service", 21),
+        ("Pollution Control Board Consent", "SPCB", 45),
+        ("Labour License / Building Plan", "Local Authority / Labour Dept", 30),
+        ("Aviation Clearance (if near airport)", "DGCA / AAI", 60),
+        ("Heritage / Archaeological NOC", "ASI / State Archaeology", 45),
+        ("Coastal Regulation Zone (CRZ) Clearance", "CRZ Authority / MoEFCC", 90),
+        ("Transmission Line Crossing Clearance", "PTCL / STU", 45),
+        ("Subscription Agreement (if open access)", "DISCOM / SLDC", 60),
+        ("PPA Approval (if applicable)", "ERC / SLDC", 90),
+        ("Investment Approval / DPR Sanction", "Sponsor / Lender", 45),
+        ("Construction Permit", "Local Authority / PWD", 30),
+        ("Electrical Inspector Approval", "Electrical Inspector", 21),
+        ("Chief Inspector of Factories NOC", "Factory Inspector", 21),
+    ]
+
+    if compliances:
+        pdf.stitle("Statutory Compliances & Approvals")
+        pdf.ptext("Status of all statutory approvals required for establishing the ground-mount solar plant.")
+        pdf.ln(1)
+
+        sc_col = _fw(pdf, [2.8, 1.8, 0.8, 0.8, 1.0])
+        sc_headers = ["Statutory Approval", "Issuing Authority", "Approx.\n(Days)", "Expected\n(Days)", "Status"]
+        pdf.tbl_hdr(sc_col, sc_headers)
+
+        completed_count = 0
+        in_progress_count = 0
+        not_started_count = 0
+
+        for idx, (approval, authority, default_days) in enumerate(STATUTORY_APPROVALS):
+            comp = compliances.get(idx, {})
+            actual_days = comp.get("actual_days", default_days)
+            status = comp.get("status", "Not Started")
+
+            if status == "Completed":
+                completed_count += 1
+                status_display = "Completed"
+            elif status == "Under Progress":
+                in_progress_count += 1
+                status_display = "In Progress"
+            else:
+                not_started_count += 1
+                status_display = "Not Started"
+
+            pdf.tbl_row(sc_col, [
+                approval, authority, str(default_days), str(actual_days), status_display,
+            ])
+
+        pdf.ln(1)
+        total = len(STATUTORY_APPROVALS)
+        pdf.ptext(
+            f"Summary: {completed_count}/{total} Completed, "
+            f"{in_progress_count}/{total} In Progress, "
+            f"{not_started_count}/{total} Not Started."
+        )
+        pdf.ln(2)
+
+    # =========================================================
     # 9. CONCLUSION & RECOMMENDATION
     # =========================================================
     pdf.stitle("9. Conclusion & Recommendation")

@@ -162,17 +162,18 @@ if "report_generated" not in st.session_state:
 if "inputs_dirty" not in st.session_state:
     st.session_state.inputs_dirty = False
 
-STEP_NAMES = ["Project", "Modules", "Priorities", "Finance", "Report"]
+STEP_NAMES = ["Project", "Modules", "Priorities", "Finance", "Compliances", "Report"]
 STEP_EYEBROWS = ["01 / PROJECT BRIEF", "02 / CANDIDATE MODULES", "03 / DECISION PRIORITIES",
-                 "04 / ECONOMIC CASE", "05 / ANALYSIS"]
+                 "04 / ECONOMIC CASE", "05 / STATUTORY COMPLIANCES", "06 / ANALYSIS"]
 STEP_DESCS = [
     "Frame the solar asset — location, scale, and site conditions anchor every calculation.",
     "Upload PDF datasheets; specs are auto-extracted and editable below.",
     "Weight what matters. Weights are normalised automatically.",
     "Set costs, tariff, and financing structure.",
+    "Track statutory approvals and environmental clearances.",
     "",
 ]
-PCT = lambda s: int((s+1)/5*100)
+PCT = lambda s: int((s+1)/6*100)
 
 # ---------------------------------------------------------------------------
 # THEME SELECTION SCREEN (shown on first visit)
@@ -496,28 +497,99 @@ elif step == 3:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ======================================================================
-# WIZARD NAVIGATION — Previous | Next | Continue (one row)
-# ======================================================================
-def _go_back():
-    st.session_state.step = st.session_state.step - 1
-    st.session_state.inputs_dirty = True
-
-def _go_forward():
-    st.session_state.step = st.session_state.step + 1
-    st.session_state.inputs_dirty = True
-
-nav_c1, nav_mid, nav_c2 = st.columns([1, 2, 1])
-with nav_c1:
-    if step > 0:
-        st.button("← Previous", key="prev_btn", type="secondary", on_click=_go_back, use_container_width=True)
-with nav_c2:
-    if step < 4:
-        st.button("Next →", key="next_btn", on_click=_go_forward, use_container_width=True)
-
-# ======================================================================
-# STEP 4 — REPORT (Run analysis & show results)
+# STEP 4 — COMPLIANCES (Statutory Approvals)
 # ======================================================================
 if step == 4:
+    st.markdown('<div class="step-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading"><div class="section-eyebrow">05 — STATUTORY COMPLIANCES</div><h2>Track approvals.</h2><p>Capture status and timelines for all statutory clearances required for a ground-mount solar plant.</p></div>', unsafe_allow_html=True)
+
+    STATUTORY_APPROVALS = [
+        ("Environmental Clearance (EC)", "MoEFCC / SEIAA", 90),
+        ("Grid Connectivity Approval", "STU / SLDC", 60),
+        ("Land Conversion / Use Permission", "District Collector / Revenue Dept", 45),
+        ("Forest Clearance (if applicable)", "MoEFCC / State Forest Dept", 120),
+        ("Water Availability / NOC", "State Water Board / Irrigation Dept", 30),
+        ("Fire Safety NOC", "State Fire Service", 21),
+        ("Pollution Control Board Consent", "SPCB", 45),
+        ("Labour License / Building Plan", "Local Authority / Labour Dept", 30),
+        ("Aviation Clearance (if near airport)", "DGCA / AAI", 60),
+        ("Heritage / Archaeological NOC", "ASI / State Archaeology", 45),
+        ("Coastal Regulation Zone (CRZ) Clearance", "CRZ Authority / MoEFCC", 90),
+        ("Transmission Line Crossing Clearance", "PTCL / STU", 45),
+        ("Subscription Agreement (if open access)", "DISCOM / SLDC", 60),
+        ("PPA Approval (if applicable)", "ERC / SLDC", 90),
+        ("Investment Approval / DPR Sanction", "Sponsor / Lender", 45),
+        ("Construction Permit", "Local Authority / PWD", 30),
+        ("Electrical Inspector Approval", "Electrical Inspector", 21),
+        ("Chief Inspector of Factories NOC", "Factory Inspector", 21),
+    ]
+
+    # Load saved compliances
+    saved_compliances = st.session_state.get("compliances", {})
+
+    comp_data = []
+    for idx, (approval, authority, default_days) in enumerate(STATUTORY_APPROVALS):
+        saved = saved_compliances.get(idx, {})
+        comp_data.append({
+            "approval": approval,
+            "authority": authority,
+            "default_days": default_days,
+            "actual_days": saved.get("actual_days", default_days),
+            "status": saved.get("status", "Not Started"),
+        })
+
+    # Display as editable table
+    comp_headers = ["Statutory Approval", "Issuing Authority", "Approx. Days", "Expected Days", "Status"]
+    col_widths = [3.0, 2.0, 1.0, 1.0, 1.2]
+    comp_cols_def = _fw(pdf=None, widths=col_widths) if False else col_widths
+
+    # Use columns for header
+    h1, h2, h3, h4, h5 = st.columns(col_widths)
+    with h1: st.markdown(f"**{comp_headers[0]}**")
+    with h2: st.markdown(f"**{comp_headers[1]}**")
+    with h3: st.markdown(f"**{comp_headers[2]}**")
+    with h4: st.markdown(f"**{comp_headers[3]}**")
+    with h5: st.markdown(f"**{comp_headers[4]}**")
+
+    st.markdown(f"<hr style='border:1px solid {t['border']};margin:0.3rem 0'>", unsafe_allow_html=True)
+
+    new_compliances = {}
+    for idx, item in enumerate(comp_data):
+        c1, c2, c3, c4, c5 = st.columns(col_widths)
+        with c1:
+            st.markdown(f"<span style='font-size:0.75rem;color:{t['text']}'>{item['approval']}</span>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"<span style='font-size:0.7rem;color:{t['muted']}'>{item['authority']}</span>", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"<span style='font-size:0.75rem;color:{t['text']}'>{item['default_days']} days</span>", unsafe_allow_html=True)
+        with c4:
+            actual = st.number_input("Days", 0, 365, int(item['actual_days']), 5, key=f"comp_days_{idx}", label_visibility="collapsed")
+        with c5:
+            status = st.selectbox("Status", ["Not Started", "Under Progress", "Completed"],
+                                  index=["Not Started", "Under Progress", "Completed"].index(item['status']),
+                                  key=f"comp_status_{idx}", label_visibility="collapsed")
+        new_compliances[idx] = {"actual_days": actual, "status": status}
+
+    st.session_state.compliances = new_compliances
+
+    # Summary
+    total = len(comp_data)
+    completed = sum(1 for v in new_compliances.values() if v["status"] == "Completed")
+    in_progress = sum(1 for v in new_compliances.values() if v["status"] == "Under Progress")
+    pending = total - completed - in_progress
+
+    st.markdown(f"""<div style="display:flex;gap:1rem;padding:0.8rem 0;font-size:0.75rem">
+        <span style="color:{t['success']}">&#9679; Completed: {completed}/{total}</span>
+        <span style="color:{t['accent']}">&#9679; In Progress: {in_progress}/{total}</span>
+        <span style="color:{t['dim']}">&#9679; Not Started: {pending}/{total}</span>
+    </div>""", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ======================================================================
+# STEP 5 — REPORT (Run analysis & show results)
+# ======================================================================
+elif step == 5:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
 
     # read all inputs from session state fallbacks
@@ -837,6 +909,7 @@ if step == 4:
     p_info = dict(st.session_state.project_info)
     p_info.update(spec_rows=spec_rows, project_params=plist, mod_info=mod_info)
     p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
+    p_info["compliances"] = st.session_state.get("compliances", {})
 
     with tempfile.TemporaryDirectory() as report_dir:
         # Copy charts into report_dir so report_generator can find them
@@ -861,6 +934,25 @@ if step == 4:
                                file_name=report_fn, mime="application/pdf", type="primary")
 
     st.markdown("</div>", unsafe_allow_html=True)
+
+# ======================================================================
+# WIZARD NAVIGATION — Previous | Next (runs after all step content)
+# ======================================================================
+def _go_back():
+    st.session_state.step = st.session_state.step - 1
+    st.session_state.inputs_dirty = True
+
+def _go_forward():
+    st.session_state.step = st.session_state.step + 1
+    st.session_state.inputs_dirty = True
+
+nav_c1, nav_mid, nav_c2 = st.columns([1, 2, 1])
+with nav_c1:
+    if step > 0:
+        st.button("← Previous", key="prev_btn", type="secondary", on_click=_go_back, use_container_width=True)
+with nav_c2:
+    if step < 5:
+        st.button("Next →", key="next_btn", on_click=_go_forward, use_container_width=True)
 
 # Footer with theme switcher
 footer_html = f"""<div style="text-align:center;padding:1.2rem;font-size:0.6rem;color:{t['dim']};font-family:DM Mono,monospace;border-top:1px solid {t['border']}">
