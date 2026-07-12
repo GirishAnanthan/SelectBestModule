@@ -595,34 +595,20 @@ elif step == 4:
     comp_data = st.session_state.get("compliance_items", []) or []
     status_options = ["Not Started", "Under Progress", "Completed", "Not Applicable"]
 
-    # Add new approval item
-    with st.expander("Add new statutory approval", expanded=False):
-        with st.form("add_compliance_item", clear_on_submit=True):
-            nc1, nc2, nc3 = st.columns([3.0, 2.0, 1.0])
-            with nc1:
-                new_approval = st.text_input("Statutory Approval")
-            with nc2:
-                new_authority = st.text_input("Issuing Authority")
-            with nc3:
-                new_days = st.number_input("Approx. Days", 0, 365, 30, 5)
-            add_item = st.form_submit_button("Add Item", type="primary")
-            if add_item:
-                if not new_approval.strip():
-                    st.warning("Enter a statutory approval description before adding.")
-                else:
-                    next_id = int(st.session_state.get("compliance_next_id", len(comp_data)))
-                    comp_data.append({
-                        "id": next_id,
-                        "approval": new_approval.strip(),
-                        "authority": new_authority.strip(),
-                        "default_days": int(new_days),
-                    })
-                    saved_compliances[next_id] = {"actual_days": int(new_days), "status": "Not Started"}
-                    st.session_state.compliance_items = comp_data
-                    st.session_state.compliances = saved_compliances
-                    st.session_state.compliance_next_id = next_id + 1
-                    st.session_state.inputs_dirty = True
-                    st.rerun()
+    if st.button("+ Add New Row", key="add_compliance_row", type="secondary"):
+        next_id = int(st.session_state.get("compliance_next_id", len(comp_data)))
+        comp_data.append({
+            "id": next_id,
+            "approval": "",
+            "authority": "",
+            "default_days": 30,
+        })
+        saved_compliances[next_id] = {"actual_days": 30, "status": "Not Started"}
+        st.session_state.compliance_items = comp_data
+        st.session_state.compliances = saved_compliances
+        st.session_state.compliance_next_id = next_id + 1
+        st.session_state.inputs_dirty = True
+        st.rerun()
 
     # Display as editable table
     comp_headers = ["Statutory Approval", "Issuing Authority", "Approx. Days", "Expected Days", "Status", "Delete"]
