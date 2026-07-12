@@ -3,12 +3,35 @@ SolarPro-FinModelling | PV Module Financial Intelligence
 Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 """
 import streamlit as st
-import os, io, json, tempfile, sys, re, hashlib, time, uuid
+import os, io, json, tempfile, sys, re, hashlib, time, uuid, traceback
 import urllib.request
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_DIR)
+ERROR_LOG_DIR = os.path.join(tempfile.gettempdir(), "solarpro_error_logs")
+ERROR_LOG_FILE = os.path.join(ERROR_LOG_DIR, "error_log.jsonl")
+
+
+def _log_app_error(stage, err, context=None):
+    """Write structured diagnostics for code errors without exposing uploaded files."""
+    try:
+        os.makedirs(ERROR_LOG_DIR, exist_ok=True)
+        record = {
+            "ts_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "stage": stage,
+            "session_id": st.session_state.get("session_id", "unknown") if hasattr(st, "session_state") else "unknown",
+            "step": st.session_state.get("step", None) if hasattr(st, "session_state") else None,
+            "error_type": type(err).__name__,
+            "message": str(err),
+            "traceback": traceback.format_exc(),
+            "context": context or {},
+        }
+        with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=True) + "\n")
+    except Exception:
+        # Logging must never cause the app itself to fail.
+        pass
 
 
 def _retry_import(retries=3, delay=1.0):
@@ -23,6 +46,7 @@ def _retry_import(retries=3, delay=1.0):
             import currency
             return pdf_parser, financial_engine, report_generator, scoring, weather_data, currency
         except (KeyError, ImportError, ModuleNotFoundError) as e:
+            _log_app_error("import_retry", e, {"attempt": attempt + 1, "max_attempts": retries})
             if attempt < retries - 1:
                 time.sleep(delay)
                 for m in list(sys.modules):
@@ -200,9 +224,12 @@ for k,v in {"results":None,"chart_paths":None,"project_info":None,"mod_list":Non
             "weather_data":None,"project_params":None,"module_specs_list":[],
             "module_pdf_bytes":{},"module_filenames":{},
             "compliances":{},"compliance_items":None,"compliance_next_id":0,"_n_mod":2,
-            "report_generated":False,"chart_cache_dir":None}.items():
+            "report_generated":False,"chart_cache_dir":None,"session_id":None}.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+if not st.session_state.get("session_id"):
+    st.session_state.session_id = uuid.uuid4().hex
 
 if not st.session_state.get("chart_cache_dir"):
     st.session_state.chart_cache_dir = os.path.join(tempfile.gettempdir(), "solarpro_chart_cache", uuid.uuid4().hex)
@@ -317,6 +344,26 @@ with st.sidebar:
     if selected_theme != st.session_state.theme:
         st.session_state.theme = selected_theme
         st.rerun()
+
+    try:
+        admin_log_key = st.secrets.get("ADMIN_LOG_KEY", "")
+    except Exception:
+        admin_log_key = os.environ.get("ADMIN_LOG_KEY", "")
+    if admin_log_key:
+        with st.expander("Admin Diagnostics", expanded=False):
+            entered_key = st.text_input("Log key", type="password", key="admin_log_key")
+            if entered_key == admin_log_key:
+                if os.path.exists(ERROR_LOG_FILE):
+                    with open(ERROR_LOG_FILE, "rb") as f:
+                        st.download_button(
+                            "Download Error Log",
+                            data=f.read(),
+                            file_name="solarpro_error_log.jsonl",
+                            mime="application/jsonl",
+                            type="secondary",
+                        )
+                else:
+                    st.caption("No error log recorded in this app instance.")
 
 # step nav — simple label
 step = st.session_state.step
@@ -443,6 +490,7 @@ elif step == 1:
                     try:
                         specs = cached_parse(pdf_bytes, default_tech)
                     except Exception as e:
+                        _log_app_error("pdf_parse", e, {"module_index": i, "filename": prev_filenames.get(i, "")})
                         st.error(f"Parse failed: {e}")
                         specs = None
                     if specs and specs.get("_error"):
@@ -927,6 +975,11 @@ elif step == 5:
 
                 st.session_state.chart_paths = chart_paths
         except Exception as _analysis_err:
+            _log_app_error("analysis", _analysis_err, {
+                "weather_source": weather_source,
+                "module_count": len(mod_list) if 'mod_list' in locals() else None,
+                "location": location,
+            })
             st.error(f"**Analysis failed:** {_analysis_err}")
             st.markdown("""
             <div style="background:#1a1a2e;border:1px solid #e74c3c40;border-radius:8px;padding:1.2rem;margin:1rem 0;">
@@ -1102,6 +1155,11 @@ elif step == 5:
                 st.download_button("Download Investment-Grade PDF Report", data=f.read(),
                                    file_name=report_fn, mime="application/pdf", type="primary")
     except Exception as _report_err:
+        _log_app_error("report_generation", _report_err, {
+            "project_name": project_name,
+            "module_count": len(module_specs_list) if module_specs_list else 0,
+            "chart_count": len(chart_paths or {}),
+        })
         st.error(f"**Report generation failed:** {_report_err}")
         st.info("Your analysis results are still available. Try refreshing the page or going back to edit inputs.")
 
