@@ -56,16 +56,16 @@ class SolarReport(FPDF):
         self.set_x(self.l_margin)
         self.set_font("Helvetica", "", size)
         self.set_text_color(40, 40, 40)
-        self.multi_cell(0, 4.2, t)
+        self.multi_cell(0, 6.0, t)
 
     def bul(self, t):
         self.set_font("Helvetica", "", 8.5)
         self.set_text_color(40, 40, 40)
         x0 = self.l_margin
         self.set_x(x0 + 2)
-        self.cell(4, 4.2, "-")
+        self.cell(4, 6.0, "-")
         self.set_x(x0 + 6)
-        self.multi_cell(self.w - x0 - self.r_margin - 6, 4.2, t)
+        self.multi_cell(self.w - x0 - self.r_margin - 6, 6.0, t)
         self.set_x(x0)
 
     def note(self, t):
@@ -403,19 +403,21 @@ def generate_report(results, project_info, chart_dir, output_path):
     pdf.set_font("Helvetica", "B", 8.5)
     pdf.set_text_color(0, 51, 102)
     pdf.cell(0, 4.5, "Report Objective & Key Assumptions", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 7.2)
+    pdf.set_font("Helvetica", "", 8.5)
     pdf.set_text_color(45, 45, 45)
-    pdf.multi_cell(0, 3.6,
+    pdf.multi_cell(0, 5.0,
         f"Objective: compare shortlisted modules for a {info.get('plant_capacity', 'N/A')} MW DC project at "
         f"{info.get('location', 'the selected site')} and identify the preferred module using generation, degradation, "
         "warranty, price, LCOE, equity IRR, NPV, payback, and user-weighted scoring.")
-    pdf.multi_cell(0, 3.6,
+    pdf.ln(1)
+    pdf.multi_cell(0, 5.0,
         f"Assumptions: weather basis {info.get('weather_source', 'Selected source')} ({info.get('weather_summary', 'N/A')}); "
         f"mounting {info.get('mounting_type', 'Fixed Tilt')}{' at ' + str(info.get('tilt_angle')) + ' degrees' if info.get('tilt_angle') else ''}; "
         f"debt/equity {debt_ratio*100:.0f}/{equity_ratio*100:.0f}; interest {interest_rate*100:.1f}% p.a.; "
         f"loan {loan_tenure} years; PPA {sym} {float(info.get('ppa_tariff', 0) or 0):.2f}/kWh; "
         f"discount rate {discount_rate*100:.1f}% p.a.; tax {tax_rate*100:.2f}%.")
-    pdf.multi_cell(0, 3.6,
+    pdf.ln(1)
+    pdf.multi_cell(0, 5.0,
         "Calculation basis: Year-1 generation is net of first-year degradation. LCOE is a simple unlevered pre-tax "
         "discounted cost of energy including CAPEX, O&M, and insurance; financing costs, tax shields, salvage, and "
         "decommissioning are excluded.")

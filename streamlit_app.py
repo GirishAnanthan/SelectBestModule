@@ -163,9 +163,9 @@ section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
 .section-eyebrow {{ font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['accent']}; letter-spacing: 0.12em; }}
 .section-heading h2 {{ font-family: 'Playfair Display', serif; font-size: 1.3rem; color: {t['heading']}; margin: 0.2rem 0; }}
 .section-heading p {{ font-size: 0.75rem; color: {t['text']}; margin: 0 0 1.2rem; opacity: 0.7; }}
-.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea textarea, div[data-baseweb="select"] > div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.4rem 0.7rem !important; }}
-.stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {{ border-color: {t['accent']} !important; box-shadow: 0 0 0 1px {t['accent']} !important; }}
-.stSelectbox>div>div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; }}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, .stTextArea textarea {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.4rem 0.7rem !important; }}
+div[data-baseweb="select"] > div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; min-height: 2.9rem !important; }}
+.stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus, div[data-baseweb="select"] > div:focus-within {{ border-color: {t['accent']} !important; box-shadow: 0 0 0 1px {t['accent']} !important; }}
 div[data-baseweb="popover"], div[role="listbox"], div[role="option"] {{ background: {t['card']} !important; color: {t['text']} !important; }}
 label {{ color: {t['text']} !important; font-size: 0.75rem !important; font-weight: 500 !important; }}
 .stRadio>div {{ flex-direction: row !important; gap: 0.4rem !important; }}
@@ -444,13 +444,10 @@ elif step == 1:
 
     module_specs_list = []
     for i in range(n_modules):
-        label = f"Module {i+1}"
         default_tech = DEFAULT_TECHS[i] if i < len(DEFAULT_TECHS) else "Mono PERC"
 
         with cols[i]:
-            st.markdown(f"""<div style="background:{t['card']};border:1px solid {t['border']};border-radius:10px;padding:0.8rem;margin-bottom:0.5rem">
-                <div style="font-size:0.8rem;font-weight:600;color:{t['text']};margin-bottom:0.3rem">{label}</div>
-            </div>""", unsafe_allow_html=True)
+            header_ph = st.empty()
 
             uploaded = st.file_uploader(f"Datasheet (PDF)", type=["pdf"], key=f"upload_{i}", label_visibility="collapsed")
 
@@ -523,17 +520,18 @@ elif step == 1:
                     specs.update(vmp=vmp, imp=imp, voc=voc, efficiency_pct=eff, temp_coeff_pmax=-tc, deg_y1_pct=deg_y1, deg_annual_pct=deg_ann, noct=noct, warranty_power=pw)
                     st.caption(f"Extracted via {specs.get('_extraction_method','N/A')}")
             else:
-                # Show previously uploaded module info if available
-                if existing:
-                    brand = existing.get("brand", existing.get("_filename", f"Module {i+1}"))
-                    wp = existing.get("power_wp", "?")
-                    st.markdown(f"""<div style="background:{t['card']};border:1px solid {t['accent']}40;border-radius:6px;padding:0.5rem 0.7rem;margin-top:0.3rem">
-                        <span style="font-size:0.75rem;font-weight:600;color:{t['accent']}">{brand}</span>
-                        <span style="font-size:0.7rem;color:{t['text']};margin-left:0.4rem">{wp} Wp</span>
-                    </div>""", unsafe_allow_html=True)
-                else:
+                if not existing:
                     st.info(f"Upload datasheet")
                 specs = existing if existing else None
+
+            final_label = f"Module {i+1}"
+            if specs and specs.get("brand"):
+                final_label = f"{specs.get('brand')} - {specs.get('power_wp', '?')} Wp"
+                
+            header_ph.markdown(f"""<div style="background:{t['card']};border:1px solid {t['border']};border-radius:10px;padding:0.8rem;margin-bottom:0.5rem">
+                <div style="font-size:0.8rem;font-weight:600;color:{t['text']};margin-bottom:0.3rem">{final_label}</div>
+            </div>""", unsafe_allow_html=True)
+
             module_specs_list.append(specs)
 
     st.session_state.module_specs_list = module_specs_list
