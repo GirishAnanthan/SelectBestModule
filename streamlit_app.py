@@ -391,8 +391,8 @@ elif step == 1:
                         specs["power_options"] = [int(selected_wp)]
 
                 if specs:
-                    prev_price = float(existing.get("price_per_wp", 22)) if existing else 22
-                    specs["price_per_wp"] = st.number_input(f"Price/Wp", 5.0, 50.0, prev_price, 0.5, key=f"price_{i}", label_visibility="collapsed")
+                    prev_price = float(existing.get("price_per_wp", 22)) if existing else 22.0
+                    specs["price_per_wp"] = st.number_input(f"Price/Wp", 5.0, 50.0, float(prev_price), 0.5, key=f"price_{i}", label_visibility="collapsed")
                     specs["_filename"] = prev_filenames.get(i, "")
 
                     # Extracted specs toggle
