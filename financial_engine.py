@@ -444,8 +444,8 @@ def _make_ts_chart(data_list, names, colors, title, ylabel, fn):
         xaxis=dict(title="Year", gridcolor="#eee", showline=False),
         yaxis=dict(title=ylabel, gridcolor="#eee"),
         template="none",
-        width=1000, height=350,
-        margin=dict(l=50, r=20, t=50, b=50),
+        width=1000, height=300,
+        margin=dict(l=50, r=20, t=45, b=45),
         legend=dict(font=dict(size=10)),
     )
     pio.write_image(fig, fn, format="png")
@@ -475,8 +475,8 @@ def _make_grouped_bar_chart(group1_vals, group2_vals, names, colors, labels, tit
         title=dict(text=title, font=dict(size=12, color="#003366")),
         barmode="group",
         template="none",
-        width=800, height=600,
-        margin=dict(l=50, r=20, t=50, b=50),
+        width=800, height=430,
+        margin=dict(l=50, r=20, t=45, b=45),
         legend=dict(font=dict(size=10)),
         yaxis=dict(gridcolor="#eee"),
     )
@@ -503,8 +503,8 @@ def _make_pie_chart(data, labels, title, fn, sym, rate, div, unit="Cr"):
     fig.update_layout(
         title=dict(text=title, font=dict(size=12, color="#003366")),
         template="none",
-        width=800, height=650,
-        margin=dict(l=50, r=50, t=50, b=50),
+        width=800, height=430,
+        margin=dict(l=45, r=45, t=45, b=45),
         showlegend=False,
     )
     pio.write_image(fig, fn, format="png")
@@ -546,8 +546,8 @@ def _make_loss_diagram(loss_series, module_name, fn):
                    font=dict(size=12, color="#003366")),
         yaxis=dict(title="Energy (% of POA)", range=[0, 108], gridcolor="#eee"),
         template="none",
-        width=1000, height=380,
-        margin=dict(l=50, r=20, t=45, b=95),
+        width=1000, height=340,
+        margin=dict(l=50, r=20, t=40, b=90),
         showlegend=False,
     )
     pio.write_image(fig, fn, format="png")

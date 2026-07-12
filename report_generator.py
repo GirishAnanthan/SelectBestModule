@@ -175,15 +175,15 @@ class SolarReport(FPDF):
         if w_mm is None:
             w_mm = self.w - self.l_margin - self.r_margin
         ch = ih * w_mm / iw
-        self.need(ch + (8 if caption else 2))
+        self.need(ch + (5 if caption else 1))
         x = self.l_margin
         if center:
             x = (self.w - w_mm) / 2
         img = self.image(path, x=x, w=w_mm)
-        self.ln(img.rendered_height + 1)
+        self.ln(img.rendered_height + 0.5)
         if caption:
             self.note(caption)
-            self.ln(1)
+            self.ln(0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -743,7 +743,7 @@ def generate_report(results, project_info, chart_dir, output_path):
     gen_path = os.path.join(chart_dir, "chart_gen.png")
     pdf.chart(gen_path,
               caption="Annual generation over 25 years. Decline driven by module degradation; lower degradation rates sustain yield.",
-              w_mm=pdf.w - pdf.l_margin - pdf.r_margin)
+              w_mm=170, center=True)
 
     # 5.3 Cash Flow
     pdf.sub_title("5.3 Cash Flow Analysis & Returns")
@@ -754,17 +754,17 @@ def generate_report(results, project_info, chart_dir, output_path):
     fcf_path = os.path.join(chart_dir, "chart_cumulative_fcf.png")
     pdf.chart(fcf_path,
               caption="Cumulative FCF - payback reflects equity recovery timeline. Post-payback slope reflects ongoing returns.",
-              w_mm=pdf.w - pdf.l_margin - pdf.r_margin)
+              w_mm=170, center=True)
 
     dscr_path = os.path.join(chart_dir, "chart_dscr.png")
     pdf.chart(dscr_path,
               caption="DSCR is computed during the debt tenure as CFADS divided by annual debt service. Values above lender thresholds indicate stronger repayment capacity.",
-              w_mm=pdf.w - pdf.l_margin - pdf.r_margin)
+              w_mm=170, center=True)
 
     ni_path = os.path.join(chart_dir, "chart_net_income.png")
     pdf.chart(ni_path,
               caption="Net income after tax. Early years lower due to interest and WDV depreciation; improves as debt reduces.",
-              w_mm=pdf.w - pdf.l_margin - pdf.r_margin)
+              w_mm=170, center=True)
 
     irr_path = os.path.join(chart_dir, "chart_irr_npv.png")
     pdf.chart(irr_path,
