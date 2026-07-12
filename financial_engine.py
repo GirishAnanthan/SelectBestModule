@@ -546,8 +546,8 @@ def _make_loss_diagram(loss_series, module_name, fn):
                    font=dict(size=12, color="#003366")),
         yaxis=dict(title="Energy (% of POA)", range=[0, 108], gridcolor="#eee"),
         template="none",
-        width=1000, height=500,
-        margin=dict(l=50, r=20, t=50, b=80),
+        width=1000, height=380,
+        margin=dict(l=50, r=20, t=45, b=95),
         showlegend=False,
     )
     pio.write_image(fig, fn, format="png")

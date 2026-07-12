@@ -867,11 +867,12 @@ def generate_report(results, project_info, chart_dir, output_path):
         pdf.ln(1)
 
         # Loss diagram chart
+        pdf.need(82)
         pdf.sub_title("7.2 Loss Diagram")
         loss_chart = os.path.join(chart_dir, "chart_loss_diagram.png")
         pdf.chart(loss_chart,
                   caption="Waterfall chart: sequential energy losses from POA irradiance (100%) to grid injection.",
-                  w_mm=pdf.w - pdf.l_margin - pdf.r_margin, center=False)
+                  w_mm=160, center=True)
         pdf.ln(1)
 
     # =========================================================
