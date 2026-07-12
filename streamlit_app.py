@@ -149,9 +149,10 @@ for k in ("step",):
     if k not in st.session_state:
         st.session_state[k] = 0
 for k,v in {"results":None,"chart_paths":None,"project_info":None,"mod_list":None,
-            "weather_data":None,"project_params":None,"module_specs_list":None,
+            "weather_data":None,"project_params":None,"module_specs_list":[],
             "module_pdf_bytes":{},"module_filenames":{},
-            "_n_mod":2,"report_generated":False}.items():
+            "compliances":{},"_n_mod":2,
+            "report_generated":False}.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -174,6 +175,17 @@ STEP_DESCS = [
     "",
 ]
 PCT = lambda s: int((s+1)/6*100)
+
+# ======================================================================
+# NAVIGATION FUNCTIONS
+# ======================================================================
+def _go_back():
+    st.session_state.step = st.session_state.step - 1
+    st.session_state.inputs_dirty = True
+
+def _go_forward():
+    st.session_state.step = st.session_state.step + 1
+    st.session_state.inputs_dirty = True
 
 # ---------------------------------------------------------------------------
 # THEME SELECTION SCREEN (shown on first visit)
@@ -499,7 +511,7 @@ elif step == 3:
 # ======================================================================
 # STEP 4 — COMPLIANCES (Statutory Approvals)
 # ======================================================================
-if step == 4:
+elif step == 4:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading"><div class="section-eyebrow">05 — STATUTORY COMPLIANCES</div><h2>Track approvals.</h2><p>Capture status and timelines for all statutory clearances required for a ground-mount solar plant.</p></div>', unsafe_allow_html=True)
 
@@ -541,7 +553,6 @@ if step == 4:
     # Display as editable table
     comp_headers = ["Statutory Approval", "Issuing Authority", "Approx. Days", "Expected Days", "Status"]
     col_widths = [3.0, 2.0, 1.0, 1.0, 1.2]
-    comp_cols_def = _fw(pdf=None, widths=col_widths) if False else col_widths
 
     # Use columns for header
     h1, h2, h3, h4, h5 = st.columns(col_widths)
@@ -602,6 +613,8 @@ elif step == 5:
     latitude = st.session_state.get("s_lat", 10.38)
     longitude = st.session_state.get("s_lon", 78.82)
     tilt_angle = st.session_state.get("s_tilt", 10)
+    if mounting_type != "Fixed Tilt":
+        tilt_angle = None
     n_modules = st.session_state.get("n_mod", 2)
     module_specs_list = st.session_state.get("module_specs_list", [])
     weather_source = st.session_state.get("s_ws", "NASA POWER API")
@@ -609,12 +622,12 @@ elif step == 5:
     mounting_height_m = st.session_state.get("s_height", 1.0)
     currency_option = st.session_state.get("s_cur", "INR - Indian Rupee (₹)")
     ppa_tariff = st.session_state.get("s_ppa", 4.50)
-    tariff_esc = st.session_state.get("s_esc", 0.0)
+    tariff_esc = st.session_state.get("s_esc", 0.0) / 100
     debt_ratio = st.session_state.get("s_debt", 0.70)
-    interest_rate = st.session_state.get("s_int", 0.09)
+    interest_rate = st.session_state.get("s_int", 9.0) / 100
     loan_tenure = st.session_state.get("s_tenure", 15)
     bos_cost = st.session_state.get("s_bos", 12.0)
-    discount_rate = st.session_state.get("s_dr", 0.10)
+    discount_rate = st.session_state.get("s_dr", 10.0) / 100
     w_lcoe = st.session_state.get("w_lcoe", 20)
     w_irr = st.session_state.get("w_irr", 20)
     w_gen = st.session_state.get("w_gen", 15)
@@ -709,71 +722,73 @@ elif step == 5:
             st.info("Showing previous results below. Click regenerate to update.")
             results = st.session_state.results
             chart_paths = st.session_state.chart_paths
-            scored = st.session_state.project_info.get("scored", [])
+            scored = (st.session_state.project_info or {}).get("scored", [])
             mod_names = list(results.keys())
         else:
             st.markdown("</div>", unsafe_allow_html=True)
             st.stop()
 
     # ---- We have fresh or existing results to display ----
+    _show_cached = False
     if st.session_state.report_generated and st.session_state.results is not None and not st.session_state.inputs_dirty:
         results = st.session_state.results
         chart_paths = st.session_state.chart_paths
-        scored = st.session_state.project_info.get("scored", [])
+        scored = (st.session_state.project_info or {}).get("scored", [])
         mod_names = list(results.keys())
         if st.button("← Back to Editing", key="back_edit_btn", type="secondary", on_click=_go_back, use_container_width=False):
             pass
+        _show_cached = True
     elif st.session_state.inputs_dirty:
-        # Should not reach here, but safety stop
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
-    # ---- RUN ANALYSIS ----
-    with st.spinner("Running comprehensive analysis..."):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            if ws == "api":
-                weather_data = cached_nasa(latitude, longitude)
-            elif ws == "pvgis":
-                weather_data = cached_pvgis(latitude, longitude)
-            else:
-                weather_data = None
-            results, chart_paths = run_analysis(mod_list, project_params, tmpdir, weather_data=weather_data)
+    if not _show_cached:
+        # ---- RUN FRESH ANALYSIS ----
+        with st.spinner("Running comprehensive analysis..."):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                if ws == "api":
+                    weather_data = cached_nasa(latitude, longitude)
+                elif ws == "pvgis":
+                    weather_data = cached_pvgis(latitude, longitude)
+                else:
+                    weather_data = None
+                results, chart_paths = run_analysis(mod_list, project_params, tmpdir, weather_data=weather_data)
 
-            _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
-                      "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
-            _wsum = sum(_raw_w.values()) or 1
-            weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
-            scored = compute_scores(results, mod_list, weights)
-            mod_names = [m["short"] for m in mod_list]
+                _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
+                          "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
+                _wsum = sum(_raw_w.values()) or 1
+                weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
+                scored = compute_scores(results, mod_list, weights)
+                mod_names = [m["short"] for m in mod_list]
 
-            # store in session
-            st.session_state.results = results
-            st.session_state.chart_paths = chart_paths
-            st.session_state.project_info = {
-                "project_name": project_name, "customer_name": customer_name,
-                "customer_company": customer_company, "plant_capacity": f"{plant_capacity:.1f}",
-                "location": location, "latitude": str(latitude), "longitude": str(longitude),
-                "date": datetime.now().strftime("%B %Y"), "mounting_type": mounting_type,
-                "tilt_angle": tilt_angle, "scored": scored, "currency": cur,
-                "weather_summary": get_weather_summary(weather_data), "weather_source": weather_source,
-                "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
-                "bifacial_detected": any(s.get("bifacial",False) for s in module_specs_list if s),
-            }
-            st.session_state.mod_list = mod_list
-            st.session_state.weather_data = weather_data
-            st.session_state.project_params = project_params
+                # store in session
+                st.session_state.results = results
+                st.session_state.chart_paths = chart_paths
+                st.session_state.project_info = {
+                    "project_name": project_name, "customer_name": customer_name,
+                    "customer_company": customer_company, "plant_capacity": f"{plant_capacity:.1f}",
+                    "location": location, "latitude": str(latitude), "longitude": str(longitude),
+                    "date": datetime.now().strftime("%B %Y"), "mounting_type": mounting_type,
+                    "tilt_angle": tilt_angle, "scored": scored, "currency": cur,
+                    "weather_summary": get_weather_summary(weather_data), "weather_source": weather_source,
+                    "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
+                    "bifacial_detected": any(s.get("bifacial",False) for s in module_specs_list if s),
+                }
+                st.session_state.mod_list = mod_list
+                st.session_state.weather_data = weather_data
+                st.session_state.project_params = project_params
 
-            # Copy charts to persistent location before tmpdir closes
-            _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
-            os.makedirs(_charts_dir, exist_ok=True)
-            _persistent_paths = {}
-            for cname, cpath in chart_paths.items():
-                if os.path.exists(cpath):
-                    _dest = os.path.join(_charts_dir, cname)
-                    import shutil; shutil.copy2(cpath, _dest)
-                    _persistent_paths[cname] = _dest
-            chart_paths = _persistent_paths
-            st.session_state.chart_paths = chart_paths
+                # Copy charts to persistent location before tmpdir closes
+                _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
+                os.makedirs(_charts_dir, exist_ok=True)
+                _persistent_paths = {}
+                for cname, cpath in chart_paths.items():
+                    if os.path.exists(cpath):
+                        _dest = os.path.join(_charts_dir, cname)
+                        import shutil; shutil.copy2(cpath, _dest)
+                        _persistent_paths[cname] = _dest
+                chart_paths = _persistent_paths
+                st.session_state.chart_paths = chart_paths
 
     # ---- RESULTS DISPLAY ----
     st.success("Analysis complete")
@@ -938,14 +953,6 @@ elif step == 5:
 # ======================================================================
 # WIZARD NAVIGATION — Previous | Next (runs after all step content)
 # ======================================================================
-def _go_back():
-    st.session_state.step = st.session_state.step - 1
-    st.session_state.inputs_dirty = True
-
-def _go_forward():
-    st.session_state.step = st.session_state.step + 1
-    st.session_state.inputs_dirty = True
-
 nav_c1, nav_mid, nav_c2 = st.columns([1, 2, 1])
 with nav_c1:
     if step > 0:
