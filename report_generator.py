@@ -588,20 +588,19 @@ def generate_report(results, project_info, chart_dir, output_path):
             pdf.sub_title("3.2 Monthly Generation Breakdown")
             pdf.ptext(f"Monthly distribution for {first_mod_res.get('name', first_mod_name)}.")
             pdf.ln(0.5)
-            mon_col = _fw(pdf, [1.0, 1.2, 1.2, 1.0, 1.5, 1.0, 1.2])
-            mon_headers = ["Month", "GHI\n(kWh/m²)", "POA\n(kWh/m²)", "Temp\n(°C)",
+            mon_col = _fw(pdf, [1.0, 1.2, 1.2, 1.5, 1.0, 1.2])
+            mon_headers = ["Month", "GHI\n(kWh/m²)", "POA\n(kWh/m²)",
                            "Generation\n(MWh)", "PR", "Yield\n(kWh/kWp)"]
             pdf.tbl_hdr(mon_col, mon_headers)
             for m in monthly:
                 pdf.tbl_row(mon_col, [
-                    m["month"], str(m["ghi"]), str(m["poa"]), str(m["temp"]),
+                    m["month"], str(m["ghi"]), str(m["poa"]),
                     f"{m['gen_kwh']/1e3:.1f}", f"{m['pr']:.3f}", str(m["specific_yield"]),
                 ])
             # Annual totals row
             pdf.tbl_row(mon_col, [
                 "Annual", f"{first_mod_res.get('pvsyst', {}).get('annual_ghi', ''):.0f}",
                 f"{first_mod_res.get('pvsyst', {}).get('annual_poa', ''):.0f}",
-                f"{first_mod_res.get('annual_metrics', {}).get('avg_temp', ''):.1f}",
                 f"{first_mod_res.get('gen_y1_kwh', 0) / 1e3:.1f}",
                 f"{first_mod_res.get('annual_metrics', {}).get('avg_pr', ''):.3f}",
                 f"{first_mod_res.get('pvsyst', {}).get('specific_yield', ''):.0f}",

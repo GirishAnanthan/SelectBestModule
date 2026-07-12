@@ -4,6 +4,7 @@ Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 """
 import streamlit as st
 import os, io, json, tempfile, sys, re, hashlib
+import urllib.request
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +16,16 @@ from report_generator import generate_report as gen_report
 from scoring import compute_scores, get_default_weights, format_scoring_table
 from weather_data import fetch_nasa_power_monthly, fetch_pvgis_monthly, compute_annual_solar_metrics, get_weather_summary
 from currency import currency_options, code_from_option, get_currency, make_formatter
+
+
+def _check_internet():
+    """Quick connectivity check against a known endpoint."""
+    try:
+        urllib.request.urlopen("https://httpbin.org/get", timeout=5)
+        return True
+    except Exception:
+        return False
+
 
 st.set_page_config(page_title="SolarPro | PV Module Financial Intelligence", page_icon="☀️", layout="wide")
 
@@ -746,9 +757,33 @@ elif step == 5:
 
     if not _show_cached:
         # ---- RUN FRESH ANALYSIS ----
+        # Check internet connectivity before weather API calls
+        _offline_mode = False
+        if ws in ("api", "pvgis") and not _check_internet():
+            st.error("🔌 No Internet Connection")
+            st.markdown("""
+            **Unable to connect to weather data source.**
+            
+            The selected weather source (**NASA POWER API** or **PVGIS TMY API**) requires an active internet connection.
+            
+            **Please check:**
+            - Your Wi-Fi or Ethernet connection is active
+            - No firewall is blocking external API requests
+            - The network has internet access
+            
+            ---
+            *Click below to continue with estimated weather data based on your site's latitude.*
+            """)
+            if st.button("✅ Continue Without Internet", key="offline_btn", type="primary"):
+                _offline_mode = True
+            else:
+                st.stop()
+        
         with st.spinner("Running comprehensive analysis..."):
             with tempfile.TemporaryDirectory() as tmpdir:
-                if ws == "api":
+                if _offline_mode:
+                    weather_data = None
+                elif ws == "api":
                     weather_data = cached_nasa(latitude, longitude)
                 elif ws == "pvgis":
                     weather_data = cached_pvgis(latitude, longitude)
