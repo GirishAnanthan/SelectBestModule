@@ -3,7 +3,7 @@ SolarPro-FinModelling | PV Module Financial Intelligence
 Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 """
 import streamlit as st
-import os, io, json, tempfile, sys, re, hashlib, time
+import os, io, json, tempfile, sys, re, hashlib, time, uuid
 import urllib.request
 from datetime import datetime
 
@@ -73,49 +73,49 @@ THEMES = {
         "bg": "#071b31", "card": "#0d2b4a", "border": "rgba(255,255,255,0.06)",
         "accent": "#f0c040", "accent2": "#e8923a", "text": "#e8edf2",
         "muted": "#7a9bb5", "dim": "#5a7a94", "heading": "#e8edf2",
-        "success": "#4ade80", "link": "#6b9bc0",
+        "success": "#4ade80", "link": "#6b9bc0", "button_fg": "#07111f",
     },
     "Arctic Frost": {
         "bg": "#f0f4f8", "card": "#ffffff", "border": "rgba(0,0,0,0.08)",
         "accent": "#2563eb", "accent2": "#7c3aed", "text": "#1e293b",
         "muted": "#64748b", "dim": "#94a3b8", "heading": "#0f172a",
-        "success": "#16a34a", "link": "#2563eb",
+        "success": "#16a34a", "link": "#2563eb", "button_fg": "#ffffff",
     },
     "Solar Flare": {
         "bg": "#1a1a2e", "card": "#16213e", "border": "rgba(255,255,255,0.08)",
         "accent": "#e94560", "accent2": "#f5a623", "text": "#eaeaea",
         "muted": "#a0a0b0", "dim": "#6c6c80", "heading": "#ffffff",
-        "success": "#00d68f", "link": "#e94560",
+        "success": "#00d68f", "link": "#e94560", "button_fg": "#07111f",
     },
     "Emerald Dark": {
         "bg": "#0d1f1d", "card": "#132e2b", "border": "rgba(255,255,255,0.06)",
         "accent": "#34d399", "accent2": "#6ee7b7", "text": "#ecfdf5",
         "muted": "#6ee7b7", "dim": "#34d399", "heading": "#ffffff",
-        "success": "#34d399", "link": "#34d399",
+        "success": "#34d399", "link": "#34d399", "button_fg": "#07111f",
     },
     "Royal Purple": {
         "bg": "#1e1033", "card": "#2a1a42", "border": "rgba(255,255,255,0.07)",
         "accent": "#c084fc", "accent2": "#a855f7", "text": "#f3e8ff",
         "muted": "#c4b5fd", "dim": "#8b5cf6", "heading": "#ffffff",
-        "success": "#34d399", "link": "#c084fc",
+        "success": "#34d399", "link": "#c084fc", "button_fg": "#07111f",
     },
     "Warm Sunset": {
         "bg": "#1c1917", "card": "#292524", "border": "rgba(255,255,255,0.07)",
         "accent": "#fb923c", "accent2": "#f97316", "text": "#fafaf9",
         "muted": "#a8a29e", "dim": "#78716c", "heading": "#ffffff",
-        "success": "#4ade80", "link": "#fb923c",
+        "success": "#4ade80", "link": "#fb923c", "button_fg": "#07111f",
     },
     "Clean White": {
         "bg": "#ffffff", "card": "#f8fafc", "border": "rgba(0,0,0,0.1)",
         "accent": "#0369a1", "accent2": "#0284c7", "text": "#1e293b",
         "muted": "#64748b", "dim": "#94a3b8", "heading": "#0c4a6e",
-        "success": "#15803d", "link": "#0369a1",
+        "success": "#15803d", "link": "#0369a1", "button_fg": "#07111f",
     },
     "Neon Tech": {
-        "bg": "#0a0a0f", "card": "#12121a", "border": "1px solid rgba(0,255,136,0.15)",
+        "bg": "#0a0a0f", "card": "#12121a", "border": "rgba(0,255,136,0.15)",
         "accent": "#00ff88", "accent2": "#00ccff", "text": "#e0e0e0",
         "muted": "#888899", "dim": "#555566", "heading": "#ffffff",
-        "success": "#00ff88", "link": "#00ccff",
+        "success": "#00ff88", "link": "#00ccff", "button_fg": "#07111f",
     },
 }
 
@@ -150,20 +150,21 @@ section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
 .section-eyebrow {{ font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['accent']}; letter-spacing: 0.12em; }}
 .section-heading h2 {{ font-family: 'Playfair Display', serif; font-size: 1.3rem; color: {t['heading']}; margin: 0.2rem 0; }}
 .section-heading p {{ font-size: 0.75rem; color: {t['text']}; margin: 0 0 1.2rem; opacity: 0.7; }}
-.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea textarea {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.4rem 0.7rem !important; }}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea textarea, div[data-baseweb="select"] > div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.4rem 0.7rem !important; }}
 .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {{ border-color: {t['accent']} !important; box-shadow: 0 0 0 1px {t['accent']} !important; }}
 .stSelectbox>div>div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; }}
+div[data-baseweb="popover"], div[role="listbox"], div[role="option"] {{ background: {t['card']} !important; color: {t['text']} !important; }}
 label {{ color: {t['text']} !important; font-size: 0.75rem !important; font-weight: 500 !important; }}
 .stRadio>div {{ flex-direction: row !important; gap: 0.4rem !important; }}
 .stRadio>div label {{ background: {t['card']} !important; padding: 0.2rem 0.7rem !important; border-radius: 5px !important; border: 1px solid {t['border']} !important; font-size: 0.7rem !important; color: {t['text']} !important; }}
-div[data-testid="stMarkdownContainer"] p {{ font-size: 0.8rem; color: {t['text']}; }}
+div[data-testid="stMarkdownContainer"], div[data-testid="stMarkdownContainer"] p, div[data-testid="stMarkdownContainer"] li, div[data-testid="stMarkdownContainer"] span {{ font-size: 0.8rem; color: {t['text']}; }}
 .stSlider>div>div>div {{ background: {t['dim']} !important; }}
 div[data-testid="stThumb"] {{ background: {t['accent']} !important; }}
 .mod-card {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 10px; padding: 1rem; margin-bottom: 0.8rem; }}
 .mod-card.done {{ border-color: {t['success']}40; }}
 .mod-card h4 {{ font-size: 0.8rem; color: {t['text']}; margin: 0 0 0.5rem; display: flex; align-items: center; gap: 0.5rem; }}
 .mod-card .tag {{ font-size: 0.55rem; background: {t['accent']}20; color: {t['accent']}; padding: 0.1rem 0.4rem; border-radius: 3px; letter-spacing: 0.04em; }}
-.stButton>button, div[data-testid="stDownloadButton"]>button {{ background: linear-gradient(135deg,{t['accent']},{t['accent2']}) !important; color: {t['bg']} !important; border: none !important; font-weight: 600 !important; padding: 0.4rem 1.2rem !important; border-radius: 6px !important; font-size: 0.78rem !important; }}
+.stButton>button, div[data-testid="stDownloadButton"]>button {{ background: linear-gradient(135deg,{t['accent']},{t['accent2']}) !important; color: {t.get('button_fg', '#07111f')} !important; border: none !important; font-weight: 600 !important; padding: 0.4rem 1.2rem !important; border-radius: 6px !important; font-size: 0.78rem !important; }}
 .stButton>button[kind="secondary"] {{ background: transparent !important; color: {t['text']} !important; border: 1px solid {t['border']} !important; }}
 .stButton>button[kind="secondary"]:hover {{ border-color: {t['accent']} !important; color: {t['accent']} !important; }}
 div[data-testid="metric-container"] {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 8px; padding: 0.7rem; }}
@@ -199,9 +200,17 @@ for k,v in {"results":None,"chart_paths":None,"project_info":None,"mod_list":Non
             "weather_data":None,"project_params":None,"module_specs_list":[],
             "module_pdf_bytes":{},"module_filenames":{},
             "compliances":{},"compliance_items":None,"compliance_next_id":0,"_n_mod":2,
-            "report_generated":False}.items():
+            "report_generated":False,"chart_cache_dir":None}.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+if not st.session_state.get("chart_cache_dir"):
+    st.session_state.chart_cache_dir = os.path.join(tempfile.gettempdir(), "solarpro_chart_cache", uuid.uuid4().hex)
+
+try:
+    st.session_state.step = max(0, min(5, int(st.session_state.step)))
+except Exception:
+    st.session_state.step = 0
 
 if "theme" not in st.session_state:
     st.session_state.theme = ""
@@ -543,7 +552,7 @@ elif step == 3:
     with col3:
         st.markdown("**Cost assumptions**")
         bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
-        discount_rate = st.number_input("Discount rate / WACC (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
+        discount_rate = st.number_input("Equity discount rate (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
     with col4:
         st.markdown("**Model defaults**")
         st.caption("25-year operating life · 0.55% annual degradation · 2.0% O&M of base cost")
@@ -593,7 +602,7 @@ elif step == 4:
         st.session_state.compliance_next_id = len(st.session_state.compliance_items)
 
     comp_data = st.session_state.get("compliance_items", []) or []
-    status_options = ["Not Started", "Under Progress", "Completed", "Not Applicable"]
+    status_options = ["Not Applicable", "Not Started", "Under Progress", "Completed"]
 
     if st.button("+ Add New Row", key="add_compliance_row", type="secondary"):
         next_id = int(st.session_state.get("compliance_next_id", len(comp_data)))
@@ -807,7 +816,7 @@ elif step == 5:
         if st.session_state.report_generated and st.session_state.results is not None:
             st.info("Showing previous results below. Click regenerate to update.")
             results = st.session_state.results
-            chart_paths = st.session_state.chart_paths
+            chart_paths = st.session_state.chart_paths or {}
             scored = (st.session_state.project_info or {}).get("scored", [])
             mod_names = list(results.keys())
             weather_data = st.session_state.get("weather_data")
@@ -819,7 +828,7 @@ elif step == 5:
     _show_cached = False
     if st.session_state.report_generated and st.session_state.results is not None and not st.session_state.inputs_dirty:
         results = st.session_state.results
-        chart_paths = st.session_state.chart_paths
+        chart_paths = st.session_state.chart_paths or {}
         scored = (st.session_state.project_info or {}).get("scored", [])
         mod_names = list(results.keys())
         weather_data = st.session_state.get("weather_data")
@@ -834,6 +843,7 @@ elif step == 5:
         # ---- RUN FRESH ANALYSIS ----
         # Check internet connectivity before weather API calls
         _offline_mode = False
+        weather_source_label = weather_source
         if ws in ("api", "pvgis") and not _check_internet():
             st.error("🔌 No Internet Connection")
             st.markdown("""
@@ -859,12 +869,20 @@ elif step == 5:
                 with tempfile.TemporaryDirectory() as tmpdir:
                     if _offline_mode:
                         weather_data = None
+                        project_params = dict(project_params)
+                        project_params["weather_source"] = "estimate"
+                        weather_source_label = "Estimated Fallback"
                     elif ws == "api":
                         weather_data = cached_nasa(latitude, longitude)
                     elif ws == "pvgis":
                         weather_data = cached_pvgis(latitude, longitude)
                     else:
                         weather_data = None
+                    if ws in ("api", "pvgis") and weather_data is None:
+                        st.warning("Selected weather data source did not return usable data. Continuing with latitude-based estimated weather values for this run.")
+                        project_params = dict(project_params)
+                        project_params["weather_source"] = "estimate"
+                        weather_source_label = "Estimated Fallback"
                     results, chart_paths = run_analysis(mod_list, project_params, tmpdir, weather_data=weather_data)
 
                     _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
@@ -873,6 +891,18 @@ elif step == 5:
                     weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
                     scored = compute_scores(results, mod_list, weights)
                     mod_names = [m["short"] for m in mod_list]
+
+                    # Persist charts before tmpdir closes. Use a per-session directory
+                    # to avoid mixing charts between concurrent Streamlit users.
+                    _charts_dir = st.session_state.chart_cache_dir
+                    os.makedirs(_charts_dir, exist_ok=True)
+                    _persistent_paths = {}
+                    for cname, cpath in (chart_paths or {}).items():
+                        if os.path.exists(cpath):
+                            _dest = os.path.join(_charts_dir, cname)
+                            import shutil; shutil.copy2(cpath, _dest)
+                            _persistent_paths[cname] = _dest
+                    chart_paths = _persistent_paths
 
                 # store in session
                 st.session_state.results = results
@@ -883,24 +913,18 @@ elif step == 5:
                     "location": location, "latitude": str(latitude), "longitude": str(longitude),
                     "date": datetime.now().strftime("%B %Y"), "mounting_type": mounting_type,
                     "tilt_angle": tilt_angle, "scored": scored, "currency": cur,
-                    "weather_summary": get_weather_summary(weather_data), "weather_source": weather_source,
+                    "weather_summary": get_weather_summary(weather_data), "weather_source": weather_source_label,
                     "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
+                    "ppa_tariff": ppa_tariff, "tariff_esc": tariff_esc,
+                    "debt_ratio": debt_ratio, "interest_rate": interest_rate,
+                    "loan_tenure": loan_tenure, "discount_rate": discount_rate,
+                    "bos_cost": bos_cost, "tax_rate": project_params.get("tax_rate", 0.2517),
                     "bifacial_detected": any(s.get("bifacial",False) for s in module_specs_list if s),
                 }
                 st.session_state.mod_list = mod_list
                 st.session_state.weather_data = weather_data
                 st.session_state.project_params = project_params
 
-                # Copy charts to persistent location before tmpdir closes
-                _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
-                os.makedirs(_charts_dir, exist_ok=True)
-                _persistent_paths = {}
-                for cname, cpath in chart_paths.items():
-                    if os.path.exists(cpath):
-                        _dest = os.path.join(_charts_dir, cname)
-                        import shutil; shutil.copy2(cpath, _dest)
-                        _persistent_paths[cname] = _dest
-                chart_paths = _persistent_paths
                 st.session_state.chart_paths = chart_paths
         except Exception as _analysis_err:
             st.error(f"**Analysis failed:** {_analysis_err}")
@@ -930,7 +954,8 @@ elif step == 5:
             st.metric(f"{name} — IRR", f"{r['irr']*100:.2f}%")
             st.metric(f"{name} — Project Cost", F["money"](r["total_cost"]))
     best = scored[0]["short"] if scored else mod_names[0]
-    st.markdown(f"<div style='text-align:center;padding:0.5rem 0;font-size:0.85rem;color:{t['accent']};font-weight:600'>&#10022; Recommended: {best} (Score: {scored[0]['weighted_total']:.1f}/100)</div>", unsafe_allow_html=True)
+    score_text = f" (Score: {scored[0]['weighted_total']:.1f}/100)" if scored else ""
+    st.markdown(f"<div style='text-align:center;padding:0.5rem 0;font-size:0.85rem;color:{t['accent']};font-weight:600'>&#10022; Recommended: {best}{score_text}</div>", unsafe_allow_html=True)
 
     # charts
     st.markdown("### Charts")
@@ -1058,13 +1083,11 @@ elif step == 5:
 
     try:
         with tempfile.TemporaryDirectory() as report_dir:
-            # Copy charts into report_dir so report_generator can find them
-            _charts_dir = os.path.join(PROJECT_DIR, ".chart_cache")
-            if os.path.isdir(_charts_dir):
-                import shutil
-                for f in os.listdir(_charts_dir):
-                    if f.endswith(".png"):
-                        shutil.copy2(os.path.join(_charts_dir, f), os.path.join(report_dir, f))
+            # Copy only this session's charts into report_dir so PDF can find them.
+            import shutil
+            for cname, cpath in (chart_paths or {}).items():
+                if cpath and os.path.exists(cpath):
+                    shutil.copy2(cpath, os.path.join(report_dir, cname))
 
             report_path = os.path.join(report_dir, "investment_report.pdf")
             gen_report(results, p_info, report_dir, report_path)

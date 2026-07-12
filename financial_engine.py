@@ -75,7 +75,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
     base_cuf = solar_metrics["cuf"]
     annual_ghi = solar_metrics["annual_ghi"]
     avg_temp = solar_metrics["avg_ambient_temp"]
-    ghi_avg = annual_ghi / 365 / 1000 if annual_ghi else 5.5
+    standard_irradiance = 800  # W/m2, standard operating irradiance for NOCT-based temperature adjustment
 
     # Bifacial settings
     ground_albedo = project_params.get("ground_albedo", 0.20)
@@ -113,7 +113,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             temp_coeff=mod.get("temp_coeff_pmax", -0.35),
             noct=mod.get("noct", 43),
             avg_temp=avg_temp,
-            ghi_avg=ghi_avg,
+            irradiance_w_m2=standard_irradiance,
         )
 
         # Bifacial boost
@@ -125,7 +125,9 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             )
             cuf = round(cuf * (1 + bifacial_gain["boost_pct"] / 100), 4)
 
-        gen_y1_kwh = actual_kw * HRS_PER_YR * cuf
+        gross_y1_kwh = actual_kw * HRS_PER_YR * cuf
+        net_y1_kwh = gross_y1_kwh * (1 - mod["deg_y1_pct"] / 100)
+        net_y1_cuf = net_y1_kwh / (actual_kw * HRS_PER_YR) if actual_kw > 0 else 0
 
         # 25-year cash flow
         rev_arr = [0]
@@ -144,7 +146,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             if yr > 1:
                 dg *= (1 - mod["deg_annual_pct"] / 100) ** (yr - 1)
 
-            gen_kwh = gen_y1_kwh * dg
+            gen_kwh = gross_y1_kwh * dg
             rev = gen_kwh * project_params["ppa_tariff"] * (1 + tariff_esc) ** (yr - 1)
 
             om = project_params["om_per_mw"] * actual_mw * (1 + project_params["om_esc"]) ** (yr - 1)
@@ -174,7 +176,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             fcf_arr.append(fcf)
 
         total_gen = sum([
-            gen_y1_kwh * (1 - mod["deg_y1_pct"] / 100) * ((1 - mod["deg_annual_pct"] / 100) ** max(0, yr - 1))
+            gross_y1_kwh * (1 - mod["deg_y1_pct"] / 100) * ((1 - mod["deg_annual_pct"] / 100) ** max(0, yr - 1))
             for yr in range(1, 26)
         ])
 
@@ -192,7 +194,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             dg = 1 - mod["deg_y1_pct"] / 100
             if yr > 1:
                 dg *= (1 - mod["deg_annual_pct"] / 100) ** (yr - 1)
-            gen_kwh = gen_y1_kwh * dg
+            gen_kwh = gross_y1_kwh * dg
             discounted_energy += gen_kwh / (1 + disc_rate) ** yr
             discounted_cost += float(om_arr[yr] + ins_arr[yr]) / (1 + disc_rate) ** yr
         lcoe = discounted_cost / discounted_energy if discounted_energy > 0 else 0.0
@@ -205,12 +207,15 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
                 payback = yr
                 break
 
+        module_specific_yield = net_y1_kwh / actual_kw if actual_kw > 0 else 0
+        module_pr = module_specific_yield / solar_metrics["annual_poa"] if solar_metrics["annual_poa"] > 0 else 0
+
         # Solar simulation metrics
         pvsyst = {
             "annual_ghi": solar_metrics["annual_ghi"],
             "annual_poa": solar_metrics["annual_poa"],
-            "specific_yield": solar_metrics["specific_yield"],
-            "performance_ratio": solar_metrics["performance_ratio"],
+            "specific_yield": round(module_specific_yield, 0),
+            "performance_ratio": round(module_pr, 3),
             "optimal_tilt": solar_metrics.get("optimal_tilt"),
         }
 
@@ -218,7 +223,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
         module_capacity_kw = actual_kw
         monthly_data, annual_metrics = compute_monthly_breakdown(
             weather_data, solar_metrics["annual_ghi"], solar_metrics["annual_poa"],
-            {}, gen_y1_kwh, cuf, module_capacity_kw, latitude=project_params.get("latitude"),
+            {}, net_y1_kwh, net_y1_cuf, module_capacity_kw, latitude=project_params.get("latitude"),
         )
 
         # Loss breakdown
@@ -228,11 +233,11 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             avg_temp, cuf,
             albedo=ground_albedo,
             mounting_type=mounting_type,
-            ghi_avg=ghi_avg,
+            irradiance_w_m2=standard_irradiance,
         )
 
         # Normalized production (kWh/kWp/day)
-        normalized_prod = gen_y1_kwh / actual_kw / 365 if actual_kw > 0 else 0
+        normalized_prod = net_y1_kwh / actual_kw / 365 if actual_kw > 0 else 0
 
         short_name = mod["short"]
         results[short_name] = {
@@ -244,13 +249,14 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             "debt": debt,
             "equity": equity,
             "loan_pmt": float(loan_pmt),
-            "gen_y1_kwh": float(gen_y1_kwh),
+            "gen_y1_kwh": float(net_y1_kwh),
+            "gross_y1_kwh": float(gross_y1_kwh),
             "total_gen_kwh": float(total_gen),
             "irr": float(irr),
             "npv": float(npv),
             "lcoe": float(lcoe),
             "payback": payback,
-            "cuf": cuf,
+            "cuf": round(net_y1_cuf, 4),
             "revenue": [float(x) for x in rev_arr],
             "net_income": [float(x) for x in ni_arr],
             "fcf": [float(x) for x in fcf_arr],
@@ -321,19 +327,20 @@ def generate_charts(results, module_list, project_params, chart_dir, currency=No
     colors = [_hex(c) for c in CHART_COLORS[:len(mod_names)]]
     cur = currency or {"symbol": "Rs.", "rate": 1.0, "unit": "Cr", "div": 1e7}
     sym, rate, unit, div = cur["symbol"], cur["rate"], cur["unit"], cur["div"]
+    loan_tenure = int(project_params.get("loan_tenure", 15) or 15)
 
     series = []
     for name in mod_names:
         r = results[name]
         cum = [sum(r["fcf"][:i + 1]) for i in range(len(r["fcf"]))]
         gen = [0] + [
-            r["gen_y1_kwh"] * ((1 - r["deg_y1"] / 100) * ((1 - r["deg_ann"] / 100) ** max(0, yr - 1))) / 1e3
+            r["gen_y1_kwh"] * ((1 - r["deg_ann"] / 100) ** max(0, yr - 1)) / 1e3
             for yr in range(1, 26)
         ]
-        ni = [r["net_income"][i] / 1e7 for i in range(len(r["net_income"]))]
+        ni = [r["net_income"][i] / rate / div for i in range(len(r["net_income"]))]
         dscr = [0] + [
             (r["net_income"][i] + r["interest"][i] + r["depreciation"][i]) / (r["interest"][i] + r["principal"][i])
-            if i < 16 and (r["interest"][i] + r["principal"][i]) > 0 else 0
+            if i <= loan_tenure and (r["interest"][i] + r["principal"][i]) > 0 else 0
             for i in range(1, 26)
         ]
         series.append({

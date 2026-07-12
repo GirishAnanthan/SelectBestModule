@@ -231,6 +231,7 @@ def generate_report(results, project_info, chart_dir, output_path):
     money_wp = F["money_wp"]
     money_small = F["money_small"]
     sym = F["symbol"]
+    money_unit = F["unit"]
     mod_names = list(results.keys())
     n_mods = len(mod_names)
 
@@ -247,6 +248,13 @@ def generate_report(results, project_info, chart_dir, output_path):
     scored = info.get("scored", [])
     score_headers = info.get("score_headers", [])
     score_rows = info.get("score_rows", [])
+    debt_ratio = float(info.get("debt_ratio", 0.70) or 0.70)
+    equity_ratio = 1 - debt_ratio
+    discount_rate = float(info.get("discount_rate", 0.10) or 0.10)
+    interest_rate = float(info.get("interest_rate", 0.09) or 0.09)
+    loan_tenure = int(info.get("loan_tenure", 15) or 15)
+    tax_rate = float(info.get("tax_rate", 0.2517) or 0.2517)
+    tariff_esc = float(info.get("tariff_esc", 0.0) or 0.0)
 
     # Determine best module by weighted score
     best_mod_name = scored[0]["short"] if scored else mod_names[0]
@@ -287,49 +295,37 @@ def generate_report(results, project_info, chart_dir, output_path):
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
 
-    # KPI boxes — N + 1 (one per module + payback + recommended)
+    # KPI boxes — wrap to avoid overlap when comparing 4-5 modules
     pw = pdf.w - pdf.l_margin - pdf.r_margin
-    boxes_per_row = min(n_mods + 2, 5)
+    kpi_boxes = []
+    for i, name in enumerate(mod_names):
+        r = results[name]
+        short = mod_info[i]["short"] if i < len(mod_info) else name
+        kpi_boxes.append((f"{short} - Equity IRR", f"{r['irr']*100:.2f}%", f"NPV {money1(r['npv'])}"))
+
+    paybacks = "/".join([str(results[n]["payback"]) for n in mod_names])
+    kpi_boxes.append(("Payback Period", f"{paybacks} yr", "equity recovery"))
+    kpi_boxes.append(("Recommended", best_mod_name, f"Score: {scored[0]['weighted_total']:.1f}" if scored else f"IRR {best_irr*100:.2f}%"))
+
+    boxes_per_row = min(len(kpi_boxes), 4)
     bw = pw / boxes_per_row - 1.5
     by = pdf.get_y()
     bx = pdf.l_margin
 
-    for i, name in enumerate(mod_names):
-        r = results[name]
-        short = mod_info[i]["short"] if i < len(mod_info) else name
+    for i, (title, value, caption) in enumerate(kpi_boxes):
+        row = i // boxes_per_row
+        col = i % boxes_per_row
         pdf.box(
-            f"{short} - Equity IRR",
-            f"{r['irr']*100:.2f}%",
-            f"NPV {money1(r['npv'])}",
-            x=bx + (bw + 1.5) * i,
-            y=by,
+            title,
+            value,
+            caption,
+            x=bx + (bw + 1.5) * col,
+            y=by + row * 23,
             w=bw,
             h=20,
         )
-
-    # Payback box
-    paybacks = "/".join([str(results[n]["payback"]) for n in mod_names])
-    pdf.box(
-        "Payback Period",
-        f"{paybacks} yr",
-        "equity recovery",
-        x=bx + (bw + 1.5) * min(n_mods, boxes_per_row - 2),
-        y=by,
-        w=bw,
-        h=20,
-    )
-
-    # Recommended box
-    pdf.box(
-        "Recommended",
-        best_mod_name,
-        f"Score: {scored[0]['weighted_total']:.1f}" if scored else f"IRR {best_irr*100:.2f}%",
-        x=bx + (bw + 1.5) * min(n_mods + 1, boxes_per_row - 1),
-        y=by,
-        w=bw,
-        h=20,
-    )
-    pdf.set_y(by + 23)
+    box_rows = (len(kpi_boxes) + boxes_per_row - 1) // boxes_per_row
+    pdf.set_y(by + box_rows * 23)
 
     # Cover summary table
     pdf.ln(4)
@@ -373,14 +369,15 @@ def generate_report(results, project_info, chart_dir, output_path):
     hi_rows.append(["Module Wattage"] + wp_row)
     hi_rows.append(["Modules Required"] + count_row)
     hi_rows.append(["Total Project Cost"] + cost_row)
-    hi_rows.append(["Equity @ 30%"] + equity_row)
+    hi_rows.append([f"Equity @ {equity_ratio*100:.0f}%"] + equity_row)
     hi_rows.append(["Year 1 Generation"] + gen_row)
     hi_rows.append(["Equity IRR"] + irr_row)
-    hi_rows.append(["NPV @ 10% Disc."] + npv_row)
+    hi_rows.append([f"NPV @ {discount_rate*100:.1f}% Disc."] + npv_row)
     hi_rows.append(["LCOE"] + lcoe_row)
     hi_rows.append(["Payback Period"] + payback_row)
 
     irr_idxs = [i for i, row in enumerate(hi_rows) if "IRR" in row[0] or "NPV" in row[0]]
+    pdf.tbl_hdr(hi_col, hi_headers)
     for i, row in enumerate(hi_rows):
         bold = i in irr_idxs
         pdf.tbl_row(hi_col, row, bold=bold, fill=i % 2 == 1)
@@ -408,6 +405,34 @@ def generate_report(results, project_info, chart_dir, output_path):
     pdf.multi_cell(0, 3.8,
         "Disclaimer: Based on manufacturer datasheets and standard financial modelling. "
         "Actual returns may vary based on site conditions, financing terms, and tariff rates.")
+
+    # =========================================================
+    # REPORT SUMMARY PAGE
+    # =========================================================
+    pdf.add_page()
+    pdf.stitle("Report Objective & Key Assumptions")
+    pdf.sub_title("Objective")
+    pdf.ptext(
+        f"This report compares shortlisted solar PV modules for a {info.get('plant_capacity', 'N/A')} MW DC "
+        f"ground-mount solar project at {info.get('location', 'the selected site')}. The objective is to identify "
+        "the technically and financially preferable module based on generation, degradation, warranty, price, "
+        "LCOE, equity IRR, NPV, payback, and user-defined scoring priorities."
+    )
+    pdf.sub_title("Important Assumptions")
+    pdf.bul(f"Weather basis: {info.get('weather_source', 'Selected source')} - {info.get('weather_summary', 'N/A')}. If the selected online source is unavailable, latitude-based fallback estimates are used and disclosed.")
+    pdf.bul(f"Mounting configuration: {info.get('mounting_type', 'Fixed Tilt')}{' with tilt ' + str(info.get('tilt_angle')) + ' degrees' if info.get('tilt_angle') else ''}.")
+    pdf.bul(f"Financial structure: Debt {debt_ratio*100:.0f}% / Equity {equity_ratio*100:.0f}%, interest {interest_rate*100:.1f}% p.a., loan tenure {loan_tenure} years.")
+    pdf.bul(f"Revenue assumptions: PPA tariff {sym} {float(info.get('ppa_tariff', 0) or 0):.2f}/kWh with tariff escalation {tariff_esc*100:.1f}% p.a.")
+    pdf.bul(f"Discounting: NPV is based on equity cash flows discounted at {discount_rate*100:.1f}% p.a.; IRR is equity IRR over the operating period.")
+    pdf.bul(f"Tax and operating cost basis: tax rate {tax_rate*100:.2f}%, O&M escalation 3.0% p.a., insurance 0.3% of project cost p.a.")
+    pdf.sub_title("Calculation Basis")
+    pdf.ptext(
+        "Generation uses selected weather-source monthly GHI where available, derives POA using the chosen mounting "
+        "configuration, applies module temperature/degradation assumptions, and reports Year-1 net generation after "
+        "first-year degradation. LCOE is a simple unlevered pre-tax discounted cost of energy including CAPEX, O&M, "
+        "and insurance, excluding financing costs, tax shields, salvage, and decommissioning. Scoring is a decision-support "
+        "heuristic based on user-selected weights and should be read with the detailed tables that follow."
+    )
 
     # =========================================================
     # 1. EXECUTIVE SUMMARY
@@ -627,7 +652,7 @@ def generate_report(results, project_info, chart_dir, output_path):
         ("Power Warranty", "warranty_yrs", "years"),
         ("Price", "price_wp", f"{sym}/Wp"),
     ]
-    for label, key, unit in spec_structure:
+    for label, key, spec_unit in spec_structure:
         row = [label]
         for name in mod_names:
             r = results[name]
@@ -647,7 +672,7 @@ def generate_report(results, project_info, chart_dir, output_path):
                     row.append(f"{val}")
             else:
                 row.append(str(val) if val else "N/A")
-        row.append(unit)
+        row.append(spec_unit)
         spec_rows.append(row)
 
     pdf.tbl_block(spec_col, spec_headers, spec_rows)
@@ -680,7 +705,7 @@ def generate_report(results, project_info, chart_dir, output_path):
     pdf.ptext(f"Total project cost: {caps}.")
     num = lambda v: f"{v / F['rate'] / F['div']:.2f}"
     cc = _fw(pdf, [2.5] + [1.5] * n_mods)
-    cc_headers = [f"Cost Component ({sym} {unit})"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
+    cc_headers = [f"Cost Component ({sym} {money_unit})"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
                                                   for i in range(n_mods)]
     capex_rows = []
     capex_rows.append(["Module Cost"] +
@@ -689,7 +714,7 @@ def generate_report(results, project_info, chart_dir, output_path):
                       [num(results[n]['bos_cost']) for n in mod_names])
     capex_rows.append(["Total Project Cost"] +
                       [num(results[n]['total_cost']) for n in mod_names])
-    capex_rows.append(["Equity @ 30%"] +
+    capex_rows.append([f"Equity @ {equity_ratio*100:.0f}%"] +
                       [num(results[n]['equity']) for n in mod_names])
     pdf.tbl_block(cc, cc_headers, capex_rows, bold_rows=[2, 3])
     pdf.ln(1)
@@ -723,7 +748,7 @@ def generate_report(results, project_info, chart_dir, output_path):
     # 5.3 Cash Flow
     pdf.sub_title("5.3 Cash Flow Analysis & Returns")
     pdf.ptext(
-        "Model includes revenue, O&M (3% escalation), insurance, debt service (15-yr @ 9%), WDV depreciation, tax 25.17%."
+        f"Model includes revenue, O&M (3% escalation), insurance, debt service ({loan_tenure}-yr @ {interest_rate*100:.1f}%), accelerated depreciation schedule, and tax {tax_rate*100:.2f}%."
     )
 
     fcf_path = os.path.join(chart_dir, "chart_cumulative_fcf.png")
@@ -733,7 +758,7 @@ def generate_report(results, project_info, chart_dir, output_path):
 
     dscr_path = os.path.join(chart_dir, "chart_dscr.png")
     pdf.chart(dscr_path,
-              caption="DSCR > 1.5x throughout the loan tenure confirms strong debt repayment capacity and bankability.",
+              caption="DSCR is computed during the debt tenure as CFADS divided by annual debt service. Values above lender thresholds indicate stronger repayment capacity.",
               w_mm=pdf.w - pdf.l_margin - pdf.r_margin)
 
     ni_path = os.path.join(chart_dir, "chart_net_income.png")
@@ -743,7 +768,7 @@ def generate_report(results, project_info, chart_dir, output_path):
 
     irr_path = os.path.join(chart_dir, "chart_irr_npv.png")
     pdf.chart(irr_path,
-              caption="IRR = annualised return on equity over 25 years. NPV = present value of all cash flows at WACC. Higher is better for both.",
+              caption=f"IRR = annualised return on equity over 25 years. NPV = present value of equity cash flows at {discount_rate*100:.1f}% discount rate. Higher is better for both.",
               w_mm=90, center=True)
 
     # =========================================================
@@ -755,9 +780,9 @@ def generate_report(results, project_info, chart_dir, output_path):
     cc2_headers = ["Financial Metric"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
                                            for i in range(n_mods)]
     fm_rows = []
-    fm_rows.append([f"Total Project Cost ({sym} {unit})"] +
+    fm_rows.append([f"Total Project Cost ({sym} {money_unit})"] +
                    [num(results[n]['total_cost']) for n in mod_names])
-    fm_rows.append([f"Equity Required ({sym} {unit})"] +
+    fm_rows.append([f"Equity Required ({sym} {money_unit})"] +
                    [num(results[n]['equity']) for n in mod_names])
     fm_rows.append(["Annual Gen Y1 (MWh)"] +
                    [f"{results[n]['gen_y1_kwh']/1e3:,.0f}" for n in mod_names])
@@ -765,11 +790,11 @@ def generate_report(results, project_info, chart_dir, output_path):
                    [f"{results[n]['total_gen_kwh']/1e6:.1f}" for n in mod_names])
     fm_rows.append(["CUF (%)"] +
                    [f"{results[n]['cuf']*100:.1f}" for n in mod_names])
-    fm_rows.append([f"Revenue Y1 ({sym} {unit})"] +
+    fm_rows.append([f"Revenue Y1 ({sym} {money_unit})"] +
                    [num(results[n]['revenue'][1]) for n in mod_names])
     fm_rows.append(["Equity IRR (%)"] +
                    [f"{results[n]['irr']*100:.2f}" for n in mod_names])
-    fm_rows.append([f"NPV @ 10% ({sym} {unit})"] +
+    fm_rows.append([f"NPV @ {discount_rate*100:.1f}% ({sym} {money_unit})"] +
                    [num(results[n]['npv']) for n in mod_names])
     fm_rows.append([f"LCOE ({sym}/kWh)"] +
                    [f"{results[n]['lcoe']/F['rate']:.3f}" for n in mod_names])

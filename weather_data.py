@@ -24,18 +24,27 @@ def _days_in_month(year, month):
     return _DAYS_IN_MONTH[month - 1]
 
 
-def _nasa_daily_to_monthly(raw_dict):
-    """Convert NASA POWER daily-average values to monthly totals (kWh/m²/month).
-    raw_dict has keys like '202001' with daily avg values.
-    Returns dict with '01','02',... keys with monthly total values.
+def _nasa_monthly_average(raw_dict, as_monthly_total=True):
+    """Average NASA POWER monthly values across years by calendar month.
+
+    NASA POWER monthly solar parameters are daily-average irradiation values
+    keyed as YYYYMM. For GHI/DNI/DIF we convert each month to monthly total
+    kWh/m2/month, then average Jan..Dec across all available years. For
+    temperature/wind we average the monthly values directly.
     """
-    result = {}
+    buckets = {f"{m:02d}": [] for m in range(1, 13)}
     for key, val in raw_dict.items():
-        if val is not None:
-            year = int(key[:4])
-            month = int(key[4:6])
-            result[f"{month:02d}"] = val * _days_in_month(year, month)
-    return result
+        if val is None or len(str(key)) < 6:
+            continue
+        year = int(str(key)[:4])
+        month = int(str(key)[4:6])
+        value = val * _days_in_month(year, month) if as_monthly_total else val
+        buckets[f"{month:02d}"].append(value)
+    return {
+        month: round(sum(values) / len(values), 1)
+        for month, values in buckets.items()
+        if values
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +72,7 @@ def fetch_nasa_power_monthly(lat, lon, start_year=2020, end_year=2024):
     url = (
         f"https://power.larc.nasa.gov/api/temporal/monthly/point"
         f"?parameters={param_str}"
-        f"&community=re"
+        f"&community=RE"
         f"&latitude={lat}&longitude={lon}"
         f"&start={start_year}&end={end_year}"
         f"&format=json"
@@ -80,9 +89,9 @@ def fetch_nasa_power_monthly(lat, lon, start_year=2020, end_year=2024):
         for param in params:
             raw = properties.get(param, {})
             if param == "T2M" or param == "WS2M":
-                monthly[param] = {k[4:]: v for k, v in raw.items() if v is not None}
+                monthly[param] = _nasa_monthly_average(raw, as_monthly_total=False)
             else:
-                monthly[param] = _nasa_daily_to_monthly(raw)
+                monthly[param] = _nasa_monthly_average(raw, as_monthly_total=True)
         return monthly
     except Exception as e:
         logger.warning(f"NASA POWER API call failed: {e}")
@@ -283,17 +292,17 @@ def _heuristic_metrics(lat, mounting_type="Fixed Tilt", tilt_angle=None):
     }
 
 
-def adjust_cuf_for_module(cuf, module_efficiency, reference_efficiency=21.0, temp_coeff=-0.35, noct=43, avg_temp=25.0, ghi_avg=5.5):
+def adjust_cuf_for_module(cuf, module_efficiency, reference_efficiency=21.0, temp_coeff=-0.35, noct=43, avg_temp=25.0, irradiance_w_m2=800):
     """Adjust CUF for module-specific characteristics (efficiency, temperature, NOCT).
     Returns adjusted CUF.
     """
-    eff_factor = module_efficiency / reference_efficiency
+    cell_temp = avg_temp + (noct - 20) / 800 * irradiance_w_m2
+    temp_factor = 1 + (temp_coeff / 100) * (cell_temp - 25)
+    temp_factor = max(0.70, min(1.05, temp_factor))
 
-    cell_temp = avg_temp + (noct - 20) / 800 * (ghi_avg * 1000)
-    temp_loss = abs(temp_coeff) * (cell_temp - 25)
-    temp_factor = 1 - temp_loss / 100
-
-    cuf_adj = cuf * eff_factor * temp_factor
+    # For fixed-DC MW comparisons, module efficiency mainly affects module count,
+    # land, and BOS, not kWh/kWp. Temperature coefficient and NOCT affect yield.
+    cuf_adj = cuf * temp_factor
     return round(cuf_adj, 4)
 
 
@@ -330,10 +339,6 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
 
     ghi_monthly, _, temp_monthly, _ = _extract_monthly_data(weather_data)
 
-    if not ghi_monthly:
-        ghi_monthly = {}
-        temp_monthly = {}
-
     # Build latitude-based seasonal temps if no real data
     _lat = latitude if latitude is not None else 20.0
     _mean_temp = max(5.0, min(35.0, 30.0 - 0.5 * abs(_lat)))
@@ -341,10 +346,25 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
     for m_idx in range(12):
         _est_temps[f"{m_idx+1:02d}"] = round(_mean_temp + 10.0 * math.sin(2 * math.pi * (m_idx - 3) / 12), 1)
 
+    if not ghi_monthly:
+        # Seasonal fallback: not bankable meteo data, but avoids impossible flat monthly values.
+        # Northern hemisphere peaks around June; southern hemisphere shifted by 6 months.
+        amp = min(0.35, 0.12 + 0.003 * abs(float(_lat)))
+        phase_shift = 0 if float(_lat) >= 0 else 6
+        raw_weights = []
+        for m_idx in range(12):
+            raw_weights.append(max(0.55, 1 + amp * math.sin(2 * math.pi * (m_idx - 2 - phase_shift) / 12)))
+        weight_sum = sum(raw_weights) or 12
+        ghi_monthly = {
+            f"{m_idx+1:02d}": annual_ghi * raw_weights[m_idx] / weight_sum
+            for m_idx in range(12)
+        }
+        temp_monthly = {}
+
     ghi_values = [v for v in ghi_monthly.values() if v is not None]
     total_ghi = sum(ghi_values) if ghi_values else annual_ghi
 
-    monthly_data = []
+    monthly_inputs = []
     for m_idx in range(12):
         m_key = f"{m_idx+1:02d}"
         m_ghi = ghi_monthly.get(m_key, annual_ghi / 12) if ghi_monthly else annual_ghi / 12
@@ -353,9 +373,19 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
             m_temp = _est_temps[m_key]
         if m_ghi is None:
             m_ghi = annual_ghi / 12
+        # Generic temperature effect for monthly shape only; annual generation remains the calibrated value.
+        temp_factor = max(0.85, min(1.05, 1 - 0.004 * (m_temp - 25)))
+        monthly_inputs.append((m_idx, m_key, m_ghi, m_temp, temp_factor))
 
+    total_gen_basis = sum(m_ghi * temp_factor for _, _, m_ghi, _, temp_factor in monthly_inputs)
+    if total_gen_basis <= 0:
+        total_gen_basis = total_ghi or 1
+
+    monthly_data = []
+    for m_idx, m_key, m_ghi, m_temp, temp_factor in monthly_inputs:
         ghi_frac = m_ghi / total_ghi if total_ghi > 0 else 1 / 12
-        m_gen = gen_y1_kwh * ghi_frac
+        gen_frac = (m_ghi * temp_factor) / total_gen_basis if total_gen_basis > 0 else 1 / 12
+        m_gen = gen_y1_kwh * gen_frac
         m_poa = annual_poa * ghi_frac
         m_pr = (m_gen / (m_poa * module_capacity_kw)) if (m_poa > 0 and module_capacity_kw > 0) else 0
         m_sy = m_gen / module_capacity_kw if module_capacity_kw > 0 else 0
@@ -371,19 +401,21 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
         })
 
     # Annual totals
+    total_poa = sum(d["poa"] for d in monthly_data)
+    total_gen = sum(d["gen_kwh"] for d in monthly_data)
     annual_metrics = {
-        "total_gen": round(sum(d["gen_kwh"] for d in monthly_data), 0),
-        "avg_pr": round(sum(d["pr"] for d in monthly_data) / 12, 3),
+        "total_gen": round(total_gen, 0),
+        "avg_pr": round(total_gen / (total_poa * module_capacity_kw), 3) if total_poa > 0 and module_capacity_kw > 0 else 0,
         "avg_temp": round(sum(d["temp"] for d in monthly_data) / 12, 1),
         "total_ghi": round(sum(d["ghi"] for d in monthly_data), 0),
-        "total_poa": round(sum(d["poa"] for d in monthly_data), 0),
+        "total_poa": round(total_poa, 0),
     }
 
     return monthly_data, annual_metrics
 
 
 def compute_energy_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20,
-                           mounting_type="Fixed Tilt", ghi_avg=5.5):
+                           mounting_type="Fixed Tilt", irradiance_w_m2=800):
     """Compute energy loss breakdown.
     Returns list of (loss_name, loss_pct, cumulative_pct) tuples for waterfall chart,
     and a dict of individual loss factors.
@@ -407,8 +439,8 @@ def compute_energy_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20,
     losses["Module Quality / LID"] = 1.5
 
     # 5. Temperature loss - computed from NOCT, ambient temp and irradiance
-    cell_temp = avg_temp + (noct - 20) / 800 * (ghi_avg * 1000)
-    temp_loss = abs(temp_coeff_pmax) * (cell_temp - 25)
+    cell_temp = avg_temp + (noct - 20) / 800 * irradiance_w_m2
+    temp_loss = abs(temp_coeff_pmax) * max(0, cell_temp - 25)
     losses["Temperature"] = round(max(0, temp_loss), 1)
 
     # 6. Low irradiance loss - typical 2%
