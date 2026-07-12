@@ -467,27 +467,26 @@ def generate_report(results, project_info, chart_dir, output_path):
         ["Location"] + [info.get("location", "")] * n_mods,
     ]
 
+    # Single rows for all modules
+    row_brand = ["Module Brand"] + [""] * n_mods
+    row_wp = ["Module Wattage"] + [""] * n_mods
+    row_cnt = ["Module Count"] + [""] * n_mods
+    row_land = ["Land Area"] + [""] * n_mods
+
     for i, name in enumerate(mod_names):
         mi = mod_info[i] if i < len(mod_info) else {}
         r = results[name]
-
-        row_brand = [""] * n_mods
-        row_brand[i] = mi.get("brand", name)
-        pd_rows.append([f"Module Brand ({i+1})"] + row_brand)
-
-        row_wp = [""] * n_mods
-        row_wp[i] = f"{mi.get('wp', 'N/A')} Wp"
-        pd_rows.append([f"Module Wattage ({i+1})"] + row_wp)
-
-        row_cnt = [""] * n_mods
-        row_cnt[i] = f"{r['module_count']:,} nos"
-        pd_rows.append([f"Module Count ({i+1})"] + row_cnt)
-
+        row_brand[i + 1] = mi.get("brand", name)
+        row_wp[i + 1] = f"{mi.get('wp', 'N/A')} Wp"
+        row_cnt[i + 1] = f"{r['module_count']:,} nos"
         dims = mi.get("dims", (None, None))
         _, _, land_acres, land_ha = _compute_land_area(dims, r["module_count"], mt)
-        row_land = [""] * n_mods
-        row_land[i] = f"{land_acres:.1f} acres ({land_ha:.1f} ha)"
-        pd_rows.append([f"Land Area ({i+1})"] + row_land)
+        row_land[i + 1] = f"{land_acres:.1f} acres ({land_ha:.1f} ha)"
+
+    pd_rows.append(row_brand)
+    pd_rows.append(row_wp)
+    pd_rows.append(row_cnt)
+    pd_rows.append(row_land)
 
     pd_rows.append(["Mounting Structure"] + [mt] * n_mods)
 
