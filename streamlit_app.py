@@ -151,7 +151,7 @@ for k in ("step",):
 for k,v in {"results":None,"chart_paths":None,"project_info":None,"mod_list":None,
             "weather_data":None,"project_params":None,"module_specs_list":None,
             "module_pdf_bytes":{},"module_filenames":{},
-            "report_generated":False}.items():
+            "_n_mod":2,"report_generated":False}.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -318,7 +318,11 @@ elif step == 1:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading"><div class="section-eyebrow">02 — CANDIDATE MODULES</div><h2>Bring the contenders.</h2><p>Upload PDF datasheets; specs are auto-extracted and editable below.</p></div>', unsafe_allow_html=True)
 
-    n_modules = st.number_input("Modules to compare", 2, 5, 2, 1, key="n_mod")
+    # Restore n_modules from session state if available
+    saved_n = st.session_state.get("module_specs_list", [])
+    default_n = max(len(saved_n), 2) if saved_n else 2
+    n_modules = st.number_input("Modules to compare", 2, 5, default_n, 1, key="n_mod")
+    st.session_state["_n_mod"] = n_modules
 
     # Create side-by-side columns with 0.15 gap ratio for spacing between modules
     gap_ratio = 0.15
