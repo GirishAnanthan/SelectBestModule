@@ -66,7 +66,7 @@ BOS_EPC_PER_W = 12.0    # Rs/Wp
 INSURANCE_RATE = 0.003
 
 # Depreciation WDV
-DEP_SCHEDULE = [0.40, 0.20, 0.10] + [0.04375]*7 + [0]*15  # 25 years
+DEP_SCHEDULE = [0.40, 0.20, 0.10] + [0.30 / 7]*7 + [0]*15  # 25 years
 
 results = {}
 HRS_PER_YR = 8760
@@ -153,8 +153,14 @@ for name, mod in modules.items():
     irr = npf.irr(fcf_arr)
     npv = npf.npv(DISCOUNT_RATE, fcf_arr)
 
-    lcoe = total_cost / total_gen  # Rs/kWh
-    lcoe_full = (total_cost + sum(om_arr) + sum(ins_arr)) / total_gen
+    disc_rate = DISCOUNT_RATE
+    discounted_cost = float(total_cost)
+    discounted_energy = 0.0
+    for yr in range(1, PLANT_LIFE + 1):
+        dg_yr = (1 - mod['deg_y1_pct']/100) * ((1 - mod['deg_annual_pct']/100) ** max(0, yr-1))
+        discounted_energy += gen_y1_kwh * dg_yr / (1 + disc_rate) ** yr
+        discounted_cost += float(om_arr[yr] + ins_arr[yr]) / (1 + disc_rate) ** yr
+    lcoe = discounted_cost / discounted_energy if discounted_energy > 0 else 0.0
 
     payout = None
     cum = 0
@@ -176,7 +182,7 @@ for name, mod in modules.items():
         "total_cost": total_cost, "debt": debt, "equity": equity,
         "loan_pmt": loan_pmt, "gen_y1_kwh": gen_y1_kwh,
         "total_gen_kwh": total_gen, "irr": irr, "npv": npv,
-        "lcoe": lcoe, "lcoe_full": lcoe_full,
+        "lcoe": lcoe,
         "payback": payout, "cuf": cuf,
         "revenue": rev_arr, "om": om_arr, "insurance": ins_arr,
         "depreciation": depr_arr, "interest": int_arr,
@@ -347,8 +353,8 @@ make_chart_ts(ni_r, ni_w,
 dscr_r = []
 dscr_w = []
 for i in range(1, 16):
-    ds_r = (r['net_income'][i] + r['depreciation'][i]) / (r['interest'][i] + r['principal'][i]) if (r['interest'][i]+r['principal'][i])>0 else 0
-    ds_w = (w['net_income'][i] + w['depreciation'][i]) / (w['interest'][i] + w['principal'][i]) if (w['interest'][i]+w['principal'][i])>0 else 0
+    ds_r = (r['net_income'][i] + r['interest'][i] + r['depreciation'][i]) / (r['interest'][i] + r['principal'][i]) if (r['interest'][i]+r['principal'][i])>0 else 0
+    ds_w = (w['net_income'][i] + w['interest'][i] + w['depreciation'][i]) / (w['interest'][i] + w['principal'][i]) if (w['interest'][i]+w['principal'][i])>0 else 0
     dscr_r.append(ds_r); dscr_w.append(ds_w)
 # pad to 25
 dscr_r = [0]+dscr_r+[0]*10

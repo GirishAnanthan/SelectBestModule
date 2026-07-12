@@ -1,10 +1,11 @@
 """
-Streamlit App - N-Module Solar PV Comparison & Investment Report Generator
+SolarPro-FinModelling | PV Module Financial Intelligence
 Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 """
 import streamlit as st
 import os, io, json, tempfile, sys, re, hashlib
 from datetime import datetime
+
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_DIR)
 
@@ -12,14 +13,277 @@ from pdf_parser import extract_module_specs, format_specs_for_display, extract_t
 from financial_engine import run_analysis
 from report_generator import generate_report as gen_report
 from scoring import compute_scores, get_default_weights, format_scoring_table
-from weather_data import fetch_nasa_power_monthly, compute_annual_solar_metrics, get_weather_summary
+from weather_data import fetch_nasa_power_monthly, fetch_pvgis_monthly, compute_annual_solar_metrics, get_weather_summary
 from currency import currency_options, code_from_option, get_currency, make_formatter
 
-st.set_page_config(page_title="Solar Module Comparison", page_icon="☀️", layout="wide")
-st.title("☀️ Solar Module Investment Comparison Engine")
-st.markdown("Upload datasheets for 2-5 solar modules. The system automatically extracts specifications.")
+st.set_page_config(page_title="SolarPro | PV Module Financial Intelligence", page_icon="☀️", layout="wide")
 
-# ----- CACHED HELPERS -----
+# ---------------------------------------------------------------------------
+# THEMES
+# ---------------------------------------------------------------------------
+THEMES = {
+    "Midnight Ocean": {
+        "bg": "#071b31", "card": "#0d2b4a", "border": "rgba(255,255,255,0.06)",
+        "accent": "#f0c040", "accent2": "#e8923a", "text": "#e8edf2",
+        "muted": "#7a9bb5", "dim": "#5a7a94", "heading": "#e8edf2",
+        "success": "#4ade80", "link": "#6b9bc0",
+    },
+    "Arctic Frost": {
+        "bg": "#f0f4f8", "card": "#ffffff", "border": "rgba(0,0,0,0.08)",
+        "accent": "#2563eb", "accent2": "#7c3aed", "text": "#1e293b",
+        "muted": "#64748b", "dim": "#94a3b8", "heading": "#0f172a",
+        "success": "#16a34a", "link": "#2563eb",
+    },
+    "Solar Flare": {
+        "bg": "#1a1a2e", "card": "#16213e", "border": "rgba(255,255,255,0.08)",
+        "accent": "#e94560", "accent2": "#f5a623", "text": "#eaeaea",
+        "muted": "#a0a0b0", "dim": "#6c6c80", "heading": "#ffffff",
+        "success": "#00d68f", "link": "#e94560",
+    },
+    "Emerald Dark": {
+        "bg": "#0d1f1d", "card": "#132e2b", "border": "rgba(255,255,255,0.06)",
+        "accent": "#34d399", "accent2": "#6ee7b7", "text": "#ecfdf5",
+        "muted": "#6ee7b7", "dim": "#34d399", "heading": "#ffffff",
+        "success": "#34d399", "link": "#34d399",
+    },
+    "Royal Purple": {
+        "bg": "#1e1033", "card": "#2a1a42", "border": "rgba(255,255,255,0.07)",
+        "accent": "#c084fc", "accent2": "#a855f7", "text": "#f3e8ff",
+        "muted": "#c4b5fd", "dim": "#8b5cf6", "heading": "#ffffff",
+        "success": "#34d399", "link": "#c084fc",
+    },
+    "Warm Sunset": {
+        "bg": "#1c1917", "card": "#292524", "border": "rgba(255,255,255,0.07)",
+        "accent": "#fb923c", "accent2": "#f97316", "text": "#fafaf9",
+        "muted": "#a8a29e", "dim": "#78716c", "heading": "#ffffff",
+        "success": "#4ade80", "link": "#fb923c",
+    },
+    "Clean White": {
+        "bg": "#ffffff", "card": "#f8fafc", "border": "rgba(0,0,0,0.1)",
+        "accent": "#0369a1", "accent2": "#0284c7", "text": "#1e293b",
+        "muted": "#64748b", "dim": "#94a3b8", "heading": "#0c4a6e",
+        "success": "#15803d", "link": "#0369a1",
+    },
+    "Neon Tech": {
+        "bg": "#0a0a0f", "card": "#12121a", "border": "1px solid rgba(0,255,136,0.15)",
+        "accent": "#00ff88", "accent2": "#00ccff", "text": "#e0e0e0",
+        "muted": "#888899", "dim": "#555566", "heading": "#ffffff",
+        "success": "#00ff88", "link": "#00ccff",
+    },
+}
+
+def _get_theme():
+    return THEMES.get(st.session_state.get("theme", ""), THEMES["Midnight Ocean"])
+
+def _theme_css(t):
+    return f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400,500&family=Manrope:wght@400,500,600,700,800&family=Playfair+Display:wght@600,700&display=swap');
+* {{ box-sizing: border-box; }}
+html, body, .stApp {{ background: {t['bg']}; color: {t['text']}; font-family: 'Manrope', sans-serif; }}
+.stApp > header {{ display: none; }}
+section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
+.block-container {{ padding: 0 !important; max-width: 1200px !important; }}
+.solarpro-header {{ display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.5rem; border-bottom: 1px solid {t['border']}; background: {t['bg']}; }}
+.solarpro-brand {{ font-family: 'Playfair Display', serif; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; color: {t['text']}; }}
+.solarpro-brand .sun-mark {{ color: {t['accent']}; font-size: 1rem; }}
+.solarpro-brand span span {{ color: {t['link']}; }}
+.solarpro-tag {{ font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['muted']}; letter-spacing: 0.08em; display: flex; align-items: center; gap: 0.4rem; }}
+.dot {{ width: 6px; height: 6px; border-radius: 50%; background: {t['success']}; display: inline-block; animation: pulse 2s infinite; }}
+@keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:0.3}} }}
+.step-bar {{ display: flex; align-items: center; gap: 0; padding: 0.6rem 1.5rem 0; background: {t['bg']}; border-bottom: 1px solid {t['border']}; }}
+.step-item {{ font-family: 'DM Mono', monospace; font-size: 0.65rem; padding: 0.5rem 1rem; cursor: pointer; color: {t['dim']}; letter-spacing: 0.04em; border-bottom: 2px solid transparent; transition: all .2s; user-select: none; }}
+.step-item:hover {{ color: {t['muted']}; }}
+.step-item.active {{ color: {t['accent']}; border-bottom-color: {t['accent']}; }}
+.step-item .num {{ color: {t['dim']}; margin-right: 0.3rem; }}
+.step-item.active .num {{ color: {t['accent']}; }}
+.progress-wrap {{ padding: 0.5rem 1.5rem; }}
+.progress-label {{ display: flex; justify-content: space-between; font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['muted']}; }}
+.progress-label .stat {{ color: {t['text']}; }}
+.progress-track {{ height: 3px; background: {t['border']}; border-radius: 2px; overflow: hidden; margin-top: 0.3rem; }}
+.progress-fill {{ height: 100%; background: linear-gradient(90deg, {t['accent']}, {t['accent2']}); border-radius: 2px; transition: width .4s; }}
+.step-panel {{ padding: 1.5rem; }}
+.section-eyebrow {{ font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['accent']}; letter-spacing: 0.12em; }}
+.section-heading h2 {{ font-family: 'Playfair Display', serif; font-size: 1.3rem; color: {t['heading']}; margin: 0.2rem 0; }}
+.section-heading p {{ font-size: 0.75rem; color: {t['muted']}; margin: 0 0 1.2rem; }}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div, .stTextArea textarea {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.4rem 0.7rem !important; }}
+.stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {{ border-color: {t['accent']} !important; box-shadow: 0 0 0 1px {t['accent']} !important; }}
+.stSelectbox>div>div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; }}
+label {{ color: {t['muted']} !important; font-size: 0.75rem !important; }}
+.stRadio>div {{ flex-direction: row !important; gap: 0.4rem !important; }}
+.stRadio>div label {{ background: {t['card']} !important; padding: 0.2rem 0.7rem !important; border-radius: 5px !important; border: 1px solid {t['border']} !important; font-size: 0.7rem !important; }}
+div[data-testid="stMarkdownContainer"] p {{ font-size: 0.8rem; color: {t['muted']}; }}
+.stSlider>div>div>div {{ background: {t['dim']} !important; }}
+div[data-testid="stThumb"] {{ background: {t['accent']} !important; }}
+.mod-card {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 10px; padding: 1rem; margin-bottom: 0.8rem; }}
+.mod-card.done {{ border-color: {t['success']}40; }}
+.mod-card h4 {{ font-size: 0.8rem; color: {t['text']}; margin: 0 0 0.5rem; display: flex; align-items: center; gap: 0.5rem; }}
+.mod-card .tag {{ font-size: 0.55rem; background: {t['accent']}20; color: {t['accent']}; padding: 0.1rem 0.4rem; border-radius: 3px; letter-spacing: 0.04em; }}
+.stButton>button, div[data-testid="stDownloadButton"]>button {{ background: linear-gradient(135deg,{t['accent']},{t['accent2']}) !important; color: {t['bg']} !important; border: none !important; font-weight: 600 !important; padding: 0.4rem 1.2rem !important; border-radius: 6px !important; font-size: 0.78rem !important; }}
+.stButton>button[kind="secondary"] {{ background: transparent !important; color: {t['muted']} !important; border: 1px solid {t['border']} !important; }}
+.stButton>button[kind="secondary"]:hover {{ border-color: {t['accent']} !important; color: {t['accent']} !important; }}
+div[data-testid="metric-container"] {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 8px; padding: 0.7rem; }}
+div[data-testid="metric-container"] > div:first-child {{ color: {t['muted']} !important; font-size: 0.65rem !important; }}
+div[data-testid="metric-container"] > div:nth-child(2) {{ font-size: 1.2rem !important; font-weight: 700 !important; color: {t['accent']} !important; }}
+.stTable table {{ background: {t['card']} !important; }}
+.stTable th {{ background: {t['dim']}40 !important; color: {t['text']} !important; font-size: 0.65rem !important; }}
+.stTable td {{ color: {t['muted']} !important; font-size: 0.7rem !important; }}
+.wiz-actions {{ display: flex; justify-content: space-between; padding: 1rem 1.5rem; margin-top: 0.5rem; border-top: 1px solid {t['border']}; }}
+.wiz-actions .info {{ font-size: 0.65rem; color: {t['dim']}; font-family: 'DM Mono', monospace; }}
+.stAlert {{ border-radius: 6px !important; font-size: 0.75rem !important; }}
+.st-cb {{ color: {t['muted']} !important; }}
+.st-b8 {{ color: {t['muted']} !important; }}
+@media (max-width:768px){{ .form-grid, .form-grid.three {{ grid-template-columns: 1fr; }} }}
+footer {{ display: none; }}
+</style>
+"""
+
+# ---------------------------------------------------------------------------
+# CSS
+# ---------------------------------------------------------------------------
+if "theme" in st.session_state and st.session_state.theme:
+    st.markdown(_theme_css(_get_theme()), unsafe_allow_html=True)
+else:
+    st.markdown(_theme_css(THEMES["Midnight Ocean"]), unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# SESSION
+# ---------------------------------------------------------------------------
+for k in ("step",):
+    if k not in st.session_state:
+        st.session_state[k] = 0
+for k,v in {"results":None,"chart_paths":None,"project_info":None,"mod_list":None,
+            "weather_data":None,"project_params":None,"module_specs_list":None,
+            "report_generated":False}.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+if "theme" not in st.session_state:
+    st.session_state.theme = ""
+if "report_generated" not in st.session_state:
+    st.session_state.report_generated = False
+if "inputs_dirty" not in st.session_state:
+    st.session_state.inputs_dirty = False
+
+STEP_NAMES = ["Project", "Modules", "Priorities", "Finance", "Report"]
+STEP_EYEBROWS = ["01 / PROJECT BRIEF", "02 / CANDIDATE MODULES", "03 / DECISION PRIORITIES",
+                 "04 / ECONOMIC CASE", "05 / ANALYSIS"]
+STEP_DESCS = [
+    "Frame the solar asset — location, scale, and site conditions anchor every calculation.",
+    "Upload PDF datasheets; specs are auto-extracted and editable below.",
+    "Weight what matters. Weights are normalised automatically.",
+    "Set costs, tariff, and financing structure.",
+    "",
+]
+PCT = lambda s: int((s+1)/5*100)
+
+# ---------------------------------------------------------------------------
+# THEME SELECTION SCREEN (shown on first visit)
+# ---------------------------------------------------------------------------
+if not st.session_state.theme:
+    st.markdown(f"""
+<div class="solarpro-header" style="background:{THEMES['Midnight Ocean']['bg']}">
+    <div class="solarpro-brand" style="color:{THEMES['Midnight Ocean']['text']}">
+        <span class="sun-mark" style="color:{THEMES['Midnight Ocean']['accent']}">&#9728;</span>
+        <span>SOLAR<span style="color:{THEMES['Midnight Ocean']['link']}">PRO</span></span>
+    </div>
+    <div class="solarpro-tag" style="color:{THEMES['Midnight Ocean']['muted']}">THEME SETUP</div>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown(f"""
+<div style="padding:1.5rem;background:{THEMES['Midnight Ocean']['bg']}">
+    <div style="font-family:'Playfair Display',serif;font-size:1.6rem;color:{THEMES['Midnight Ocean']['heading']}">Choose Your Theme</div>
+    <p style="font-size:0.85rem;color:{THEMES['Midnight Ocean']['muted']};margin:0.3rem 0 1.5rem">
+        Select a visual theme for SolarPro. You can change this later from Settings.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+    # Theme grid - 4 columns
+    theme_names = list(THEMES.keys())
+    for row_start in range(0, len(theme_names), 4):
+        cols = st.columns(4)
+        for idx, col in enumerate(cols):
+            t_idx = row_start + idx
+            if t_idx >= len(theme_names):
+                break
+            name = theme_names[t_idx]
+            t = THEMES[name]
+            with col:
+                st.markdown(f"""
+<div style="background:{t['card']};border:1px solid {t['border']};border-radius:10px;padding:0.8rem;min-height:130px">
+    <div style="display:flex;gap:5px;margin-bottom:8px">
+        <div style="width:18px;height:18px;border-radius:50%;background:{t['accent']}"></div>
+        <div style="width:18px;height:18px;border-radius:50%;background:{t['accent2']}"></div>
+        <div style="width:18px;height:18px;border-radius:50%;background:{t['text_muted'] if 'text_muted' in t else t['muted']}"></div>
+        <div style="width:18px;height:18px;border-radius:50%;background:{t['dim']}"></div>
+    </div>
+    <div style="font-size:0.75rem;font-weight:600;color:{t['text']};font-family:Manrope,sans-serif">{name}</div>
+    <div style="font-size:0.55rem;color:{t['muted']};margin-top:2px;font-family:DM Mono,monospace">{t['bg']}</div>
+</div>
+""", unsafe_allow_html=True)
+                if st.button(f"Select {name}", key=f"theme_{name}", use_container_width=True):
+                    st.session_state.theme = name
+                    st.rerun()
+
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# HEADER (only shown after theme is selected)
+# ---------------------------------------------------------------------------
+t = _get_theme()
+st.markdown(f"""
+<div class="solarpro-header">
+    <div class="solarpro-brand"><span class="sun-mark">&#9728;</span><span>SOLAR<span>PRO</span></span></div>
+    <div class="solarpro-tag"><span class="dot"></span>PV Module Financial Intelligence</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# SIDEBAR - Theme Switcher
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown(f"<p style='font-size:0.7rem;color:{t['muted']};margin-bottom:0.5rem'>THEME</p>", unsafe_allow_html=True)
+    theme_options = list(THEMES.keys())
+    current_idx = theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0
+    selected_theme = st.selectbox("Theme", theme_options, index=current_idx, key="sidebar_theme", label_visibility="collapsed")
+    if selected_theme != st.session_state.theme:
+        st.session_state.theme = selected_theme
+        st.rerun()
+
+# step bar
+nav_html = '<div class="step-bar">'
+for i,n in enumerate(STEP_NAMES):
+    cls = "active" if i==st.session_state.step else ""
+    nav_html += f'<div class="step-item {cls}" data-idx="{i}"><span class="num">{i+1:02d}</span>{n}</div>'
+nav_html += '</div>'
+st.markdown(nav_html, unsafe_allow_html=True)
+
+# progress
+step = st.session_state.step
+st.markdown(f"""
+<div class="progress-wrap">
+    <div class="progress-label"><span>{STEP_EYEBROWS[step]}</span><span class="stat">{STEP_DESCS[step]}</span></div>
+    <div class="progress-track"><div class="progress-fill" style="width:{PCT(step)}%"></div></div>
+</div>
+""", unsafe_allow_html=True)
+
+# click handler for step nav — always enabled
+st.markdown("""
+<script>
+const items = parent.document.querySelectorAll('.step-item');
+items.forEach(el => el.addEventListener('click', function(){
+    const idx = this.dataset.idx;
+    const btns = parent.document.querySelectorAll('button[kind="secondary"]');
+    if(btns[idx]) btns[idx].click();
+}));
+</script>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# IMPORTS FOR CACHED HELPERS
+# ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def cached_parse(pdf_bytes, default_tech, _version=5):
     return extract_module_specs(pdf_bytes, default_tech)
@@ -33,710 +297,542 @@ def cached_extract_text(pdf_bytes):
     text, method = extract_text_from_pdf(pdf_bytes)
     return text, method
 
-
 @st.cache_data(show_spinner=False)
 def cached_nasa(lat, lon):
     return fetch_nasa_power_monthly(lat, lon)
 
-# ===== SIDEBAR =====
-with st.sidebar:
-    st.header("🏢 Customer & Project")
-    customer_name = st.text_input("Customer Name", "Raghavan")
-    customer_company = st.text_input("Company", "Raghavan Group")
-    project_name = st.text_input("Project Name", "19.6 MW Solar Plant - Pudukottai")
-    plant_capacity = st.number_input("Plant Capacity (MW DC)", 0.1, 500.0, 19.6, 0.1)
-    location = st.text_input("Location", "Pudukottai, Tamilnadu, India")
-    col_lat, col_lon = st.columns(2)
-    with col_lat:
-        latitude = st.number_input("Latitude", -90.0, 90.0, 10.38, 0.01, format="%.2f")
-    with col_lon:
-        longitude = st.number_input("Longitude", -180.0, 180.0, 78.82, 0.01, format="%.2f")
+@st.cache_data(show_spinner=False)
+def cached_pvgis(lat, lon):
+    return fetch_pvgis_monthly(lat, lon)
 
-    st.markdown("---")
-    st.header("💱 Reporting Currency")
-    currency_option = st.selectbox(
-        "Select Currency", currency_options(), index=0,
-        help="All monetary values in the app and PDF report are converted to this currency.",
-    )
+DEFAULT_TECHS = ["Mono PERC", "N-TOPCon", "HJT", "Mono PERC", "Poly PERC"]
+
+
+# ======================================================================
+# STEP 0 — PROJECT
+# ======================================================================
+if step == 0:
+    st.markdown('<div class="step-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading"><div class="section-eyebrow">01 — PROJECT BRIEF</div><h2>Frame the solar asset.</h2><p>These inputs anchor energy-yield assumptions and scale commercial comparison.</p></div>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        customer_name = st.text_input("Customer / Organisation", "Raghavan", key="s_customer")
+        project_name = st.text_input("Project name", "19.6 MW Solar Plant - Pudukottai", key="s_project")
+        location = st.text_input("Site location", "Pudukottai, Tamilnadu, India", key="s_location")
+        mounting_type = st.radio("Mounting structure", ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"], index=0, key="s_mounting")
+    with col2:
+        customer_company = st.text_input("Company", "Raghavan Group", key="s_company")
+        plant_capacity = st.number_input("DC plant capacity (MWp)", 0.1, 500.0, 19.6, 0.1, key="s_cap")
+        latitude = st.number_input("Latitude (°)", -90.0, 90.0, 10.38, 0.01, format="%.2f", key="s_lat")
+        longitude = st.number_input("Longitude (°)", -180.0, 180.0, 78.82, 0.01, format="%.2f", key="s_lon")
+        tilt_angle = None
+        if mounting_type == "Fixed Tilt":
+            tilt_angle = st.number_input("Tilt angle (°)", 0, 60, 10, 1, key="s_tilt")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ======================================================================
+# STEP 1 — MODULES (side-by-side column layout)
+# ======================================================================
+elif step == 1:
+    st.markdown('<div class="step-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading"><div class="section-eyebrow">02 — CANDIDATE MODULES</div><h2>Bring the contenders.</h2><p>Upload PDF datasheets; specs are auto-extracted and editable below.</p></div>', unsafe_allow_html=True)
+
+    n_modules = st.number_input("Modules to compare", 2, 5, 2, 1, key="n_mod")
+
+    # Create side-by-side columns with 0.15 gap ratio for spacing between modules
+    gap_ratio = 0.15
+    col_ratios = [1.0] * n_modules
+    gap_total = gap_ratio * (n_modules - 1)
+    col_weight = (1.0 - gap_total) / n_modules
+    spec_ratio = [col_weight] * n_modules
+    cols = st.columns(spec_ratio, gap="small")
+
+    module_specs_list = []
+    for i in range(n_modules):
+        label = f"Module {i+1}"
+        default_tech = DEFAULT_TECHS[i] if i < len(DEFAULT_TECHS) else "Mono PERC"
+
+        with cols[i]:
+            st.markdown(f"""<div style="background:{t['card']};border:1px solid {t['border']};border-radius:10px;padding:0.8rem;margin-bottom:0.5rem">
+                <div style="font-size:0.8rem;font-weight:600;color:{t['text']};margin-bottom:0.3rem">{label}</div>
+            </div>""", unsafe_allow_html=True)
+
+            uploaded = st.file_uploader(f"Datasheet (PDF)", type=["pdf"], key=f"upload_{i}", label_visibility="collapsed")
+            if uploaded is not None:
+                pdf_bytes = uploaded.read()
+                try:
+                    specs = cached_parse(pdf_bytes, default_tech)
+                except Exception as e:
+                    st.error(f"Parse failed: {e}")
+                    specs = None
+                if specs and specs.get("_error"):
+                    st.warning(f"Partial: {specs['_error']}")
+
+                if specs and specs.get("power_options"):
+                    opts = specs["power_options"]
+                    mid_idx = len(opts) // 2
+                    selected_wp = st.selectbox("Wp", options=opts, index=min(mid_idx+1, len(opts)-1), key=f"wp_{i}", label_visibility="collapsed")
+                    specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+                    specs["power_wp"] = int(selected_wp)
+                elif specs:
+                    selected_wp = st.number_input("Wp", 300, 800, 600, 5, key=f"wp_m_{i}", label_visibility="collapsed")
+                    specs["power_wp"] = int(selected_wp)
+                    specs["power_options"] = [int(selected_wp)]
+
+                if specs:
+                    default_price = 20 if "redren" in (uploaded.name or "").lower() else 22
+                    specs["price_per_wp"] = st.number_input(f"Price/Wp", 5.0, 50.0, float(default_price), 0.5, key=f"price_{i}", label_visibility="collapsed")
+                    specs["_filename"] = uploaded.name
+
+                    # Extracted specs toggle
+                    with st.popover("Extracted specs", use_container_width=True):
+                        st.text(format_specs_for_display(specs))
+
+                    # Editable fields — compact single column
+                    vmp = st.number_input("Vmp (V)", 0.0, 100.0, float(specs.get("vmp",0) or 0), key=f"vmp_{i}")
+                    imp = st.number_input("Imp (A)", 0.0, 30.0, float(specs.get("imp",0) or 0), key=f"imp_{i}")
+                    voc = st.number_input("Voc (V)", 0.0, 100.0, float(specs.get("voc",0) or 0), key=f"voc_{i}")
+                    eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(specs.get("efficiency_pct",0) or 0), key=f"eff_{i}")
+                    tc = st.number_input("TC Pmax (%/°C)", 0.0, 1.0, float(abs(specs.get("temp_coeff_pmax",0) or 0)), key=f"tc_{i}")
+                    deg_y1 = st.number_input("Y1 Degr. (%)", 0.0, 5.0, float(specs.get("deg_y1_pct",0) or 0), key=f"deg_y1_{i}")
+                    deg_ann = st.number_input("Ann. Degr. (%)", 0.0, 1.0, float(specs.get("deg_annual_pct",0) or 0), key=f"deg_ann_{i}")
+                    noct = st.number_input("NOCT (°C)", 0, 60, int(specs.get("noct",0) or 0), key=f"noct_{i}")
+                    pw = st.number_input("Warranty (yr)", 0, 40, int(specs.get("warranty_power",0) or 0), key=f"pw_{i}")
+
+                    specs.update(vmp=vmp, imp=imp, voc=voc, efficiency_pct=eff, temp_coeff_pmax=-tc, deg_y1_pct=deg_y1, deg_annual_pct=deg_ann, noct=noct, warranty_power=pw)
+                    st.caption(f"Extracted via {specs.get('_extraction_method','N/A')}")
+            else:
+                st.info(f"Upload datasheet")
+                specs = None
+            module_specs_list.append(specs)
+
+    st.session_state.module_specs_list = module_specs_list
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ======================================================================
+# STEP 2 — PRIORITIES
+# ======================================================================
+elif step == 2:
+    st.markdown('<div class="step-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading"><div class="section-eyebrow">03 — DECISION PRIORITIES</div><h2>Weight what matters.</h2><p>Weights directly drive the composite ranking. They are normalised automatically.</p></div>', unsafe_allow_html=True)
+
+    default_w = get_default_weights()
+    c1, c2 = st.columns(2)
+    with c1:
+        w_lcoe = st.slider("LCOE Weight (%)", 0, 100, default_w["lcoe"], 5, key="w_lcoe")
+        w_irr = st.slider("IRR Weight (%)", 0, 100, default_w["irr"], 5, key="w_irr")
+        w_gen = st.slider("Generation Yield Weight (%)", 0, 100, default_w["generation_yield"], 5, key="w_gen")
+        w_deg = st.slider("Degradation Weight (%)", 0, 100, default_w["degradation"], 5, key="w_deg")
+    with c2:
+        w_warr = st.slider("Warranty Weight (%)", 0, 100, default_w["warranty"], 5, key="w_warr")
+        w_price = st.slider("Price Weight (%)", 0, 100, default_w["price"], 5, key="w_price")
+        w_tc = st.slider("Temp Coeff Weight (%)", 0, 100, default_w["temp_coeff"], 5, key="w_tc")
+
+    total_w = w_lcoe + w_irr + w_gen + w_deg + w_warr + w_price + w_tc
+    st.caption(f"Total allocation: {total_w}% {'✅ Balanced' if total_w == 100 else '⚠️ Please adjust to sum to 100%'}")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ======================================================================
+# STEP 3 — FINANCE
+# ======================================================================
+elif step == 3:
+    st.markdown('<div class="step-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading"><div class="section-eyebrow">04 — ECONOMIC CASE</div><h2>Model the investment.</h2><p>Enter costs, tariff and financing terms.</p></div>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Weather & site**")
+        weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws")
+        ground_albedo = st.number_input("Ground albedo", 0.0, 0.9, 0.20, 0.05, key="s_albedo")
+        mounting_height_m = st.number_input("Mounting height (m)", 0.5, 3.0, 1.0, 0.1, key="s_height")
+        st.markdown("**Currency**")
+        currency_option = st.selectbox("Reporting currency", currency_options(), index=0, key="s_cur")
+    with col2:
+        st.markdown("**Revenue & financing**")
+        ppa_tariff = st.number_input("PPA tariff (per kWh)", 1.0, 10.0, 4.50, 0.25, key="s_ppa")
+        tariff_esc = st.number_input("PPA escalation (% p.a.)", 0.0, 5.0, 0.0, 0.1, key="s_esc") / 100
+        debt_ratio = st.slider("Debt ratio", 0.5, 0.9, 0.70, 0.05, key="s_debt")
+        interest_rate = st.number_input("Interest rate (% p.a.)", 5.0, 20.0, 9.0, 0.5, key="s_int") / 100
+        loan_tenure = st.slider("Loan tenure (years)", 5, 20, 15, key="s_tenure")
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("**Cost assumptions**")
+        bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
+        discount_rate = st.number_input("Discount rate / WACC (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
+    with col4:
+        st.markdown("**Model defaults**")
+        st.caption("25-year operating life · 0.55% annual degradation · 2.0% O&M of base cost")
+
     cur = get_currency(code_from_option(currency_option))
     F = make_formatter(cur)
     sym = F["symbol"]
     currency_code = code_from_option(currency_option)
 
-    st.markdown("---")
-    st.header("🌤️ Weather Data")
-    weather_source = st.radio(
-        "Data Source",
-        ["NASA POWER API (Recommended)", "Simplified Estimate"],
-        index=0,
-        help="NASA POWER provides real satellite-derived solar & weather data",
-    )
-    ground_albedo = st.number_input(
-        "Ground Albedo", 0.0, 0.9, 0.20, 0.05,
-        help="Surface reflectivity (0.2 = grass, 0.6 = sand, 0.8 = snow). Used for bifacial gain.",
-    )
-    mounting_height_m = st.number_input(
-        "Mounting Height (m)", 0.5, 3.0, 1.0, 0.1,
-        help="Height of modules above ground. Affects bifacial rear irradiance view factor.",
-    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.header("💰 Financial Parameters")
-    ppa_tariff = st.number_input(f"PPA Tariff ({sym}/kWh)", 1.0, 10.0, 4.50, 0.25)
-    tariff_esc = st.number_input(
-        "PPA Tariff Escalation (% p.a.)", 0.0, 5.0, 0.0, 0.1,
-        help="Annual escalation applied to the PPA tariff over the plant life.",
-    ) / 100
-    debt_ratio = st.slider("Debt Ratio", 0.5, 0.9, 0.70, 0.05)
-    interest_rate = st.number_input("Interest Rate (% p.a.)", 5.0, 20.0, 9.0, 0.5) / 100
-    loan_tenure = st.slider("Loan Tenure (years)", 5, 20, 15)
-    discount_rate = st.number_input("Discount Rate / WACC (%)", 5.0, 20.0, 10.0, 0.5) / 100
-    bos_cost = st.number_input(f"BoS, EPC & Land ({sym}/Wp)", 5.0, 30.0, 12.0, 0.5)
+# ======================================================================
+# WIZARD ACTIONS (shared across all steps)
+# ======================================================================
+# Hidden back buttons for step bar navigation (one per step, triggered by JS)
+for _si in range(5):
+    if _si != step:
+        st.button(f"← Step {_si}", key=f"nav_back_{_si}", type="secondary",
+                  on_click=lambda s=_si: [setattr(st.session_state, "step", s),
+                                          setattr(st.session_state, "inputs_dirty", True) if s < 4 else None],
+                  visible=False)
 
-    st.markdown("---")
-    st.header("🏗️ Mounting Structure")
-    mounting_type = st.radio(
-        "Select Mounting Type",
-        ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"],
-        index=0,
-    )
-    tilt_angle = None
-    if mounting_type == "Fixed Tilt":
-        tilt_angle = st.number_input("Tilt Angle (degrees)", 0, 60, 10, 1)
+def _go_back():
+    st.session_state.step = st.session_state.step - 1
+    st.session_state.inputs_dirty = True
 
-    st.markdown("---")
-    st.header("⚖️ Scoring Weights")
-    with st.expander("Adjust Scoring Weights", expanded=False):
-        default_w = get_default_weights()
-        w_lcoe = st.slider("LCOE Weight (%)", 0, 100, default_w["lcoe"], 5)
-        w_irr = st.slider("IRR Weight (%)", 0, 100, default_w["irr"], 5)
-        w_gen = st.slider("Generation Yield Weight (%)", 0, 100, default_w["generation_yield"], 5)
-        w_deg = st.slider("Degradation Weight (%)", 0, 100, default_w["degradation"], 5)
-        w_warr = st.slider("Warranty Weight (%)", 0, 100, default_w["warranty"], 5)
-        w_price = st.slider("Price Weight (%)", 0, 100, default_w["price"], 5)
-        w_tc = st.slider("Temp Coeff Weight (%)", 0, 100, default_w["temp_coeff"], 5)
-        total_w = w_lcoe + w_irr + w_gen + w_deg + w_warr + w_price + w_tc
-        st.caption(f"Total: {total_w}% {'✅' if total_w == 100 else '⚠️ Must sum to 100%'}")
-        weights_valid = (total_w == 100)
-        if not weights_valid:
-            st.warning("Weights must sum to exactly 100%")
+def _go_forward():
+    st.session_state.step = st.session_state.step + 1
+    st.session_state.inputs_dirty = True
 
-    st.markdown("---")
-    st.header("💾 Load Configuration")
-    _cfg_file = st.file_uploader("Load saved config (JSON)", type=["json"], key="cfg_upload")
-    if _cfg_file is not None:
-        try:
-            st.session_state["cfg"] = json.loads(_cfg_file.read())
-            st.success("Config loaded — applied to the analysis below.")
-        except Exception as e:
-            st.error(f"Invalid config: {e}")
-    if st.session_state.get("cfg") and st.button("Clear loaded config"):
-        st.session_state.pop("cfg", None)
-        st.rerun()
+st.markdown('<div class="wiz-actions">', unsafe_allow_html=True)
+bcol1, bcol2 = st.columns([1, 1])
+with bcol1:
+    if step > 0:
+        st.button("← Back", key="back_btn", type="secondary", on_click=_go_back)
+with bcol2:
+    if step < 4:
+        st.button("Continue →", key="next_btn", on_click=_go_forward)
+    elif step == 4 and st.session_state.results is not None:
+        st.button("← Back to Editing", key="back_edit_btn", type="secondary", on_click=_go_back)
+st.markdown('</div>', unsafe_allow_html=True)
 
-# ===== MAIN: Module Upload & Parse =====
-DEFAULT_TECHS = ["Mono PERC", "N-TOPCon", "HJT", "Mono PERC", "Poly PERC"]
+# ======================================================================
+# STEP 4 — REPORT (Run analysis & show results)
+# ======================================================================
+if step == 4:
+    st.markdown('<div class="step-panel">', unsafe_allow_html=True)
 
-def render_module_ui(idx):
-    """Render file uploader and spec editor for one module. Returns specs dict or None."""
-    label = f"Module {idx + 1}"
-    default_tech = DEFAULT_TECHS[idx] if idx < len(DEFAULT_TECHS) else "Mono PERC"
-
-    with st.expander(f"📄 {label}", expanded=True):
-        uploaded = st.file_uploader(
-            f"Upload {label} Datasheet (PDF)", type=["pdf"],
-            key=f"upload_{idx}",
-        )
-        if uploaded is None:
-            st.info(f"Upload {label} datasheet PDF to begin")
-            return None
-
-        pdf_bytes = uploaded.read()
-
-        try:
-            specs = cached_parse(pdf_bytes, default_tech)
-        except Exception as e:
-            st.error(f"Failed to parse {uploaded.name}: {e}")
-            return None
-        if specs.get("_error"):
-            st.warning(f"Partial parse for {uploaded.name}: {specs['_error']}")
-        st.success(f"Extracted via {specs.get('_extraction_method', 'N/A')}")
-
-        if specs.get("power_options"):
-            opts = specs["power_options"]
-            mid_idx = len(opts) // 2
-            default_idx = min(mid_idx + 1, len(opts) - 1)
-            selected_wp = st.selectbox(
-                f"{label} - Select Module Wattage (Wp)",
-                options=opts, index=default_idx,
-                key=f"wp_{idx}",
-            )
-            try:
-                specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
-            except Exception as e:
-                st.error(f"Failed to re-parse {uploaded.name}: {e}")
-                return None
-            specs["power_wp"] = int(selected_wp)
-        else:
-            st.warning("Could not detect power ratings. Enter manually below.")
-            selected_wp = st.number_input(f"{label} - Module Power (Wp)", 300, 800, 600, 5, key=f"wp_manual_{idx}")
-            specs["power_wp"] = int(selected_wp)
-            specs["power_options"] = [int(selected_wp)]
-
-        default_price = 20 if "redren" in (uploaded.name or "").lower() else 22
-        price = st.number_input(
-            f"{label} - Price ({sym}/Wp)", 5.0, 50.0, float(default_price), 0.5,
-            key=f"price_{idx}",
-        )
-        specs["price_per_wp"] = price
-        specs["_filename"] = uploaded.name
-
-        with st.expander(f"🔍 {label} - Extracted Specifications", expanded=False):
-            st.text(format_specs_for_display(specs))
-
-        st.caption("Edit any incorrectly extracted values below:")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            vmp = st.number_input("Vmp (V)", 0.0, 100.0, float(specs.get("vmp", 0) or 0), key=f"vmp_{idx}")
-            imp = st.number_input("Imp (A)", 0.0, 30.0, float(specs.get("imp", 0) or 0), key=f"imp_{idx}")
-            voc = st.number_input("Voc (V)", 0.0, 100.0, float(specs.get("voc", 0) or 0), key=f"voc_{idx}")
-            isc = st.number_input("Isc (A)", 0.0, 30.0, float(specs.get("isc", 0) or 0), key=f"isc_{idx}")
-            eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(specs.get("efficiency_pct", 0) or 0), key=f"eff_{idx}")
-        with col_b:
-            tc = st.number_input("Temp Coeff Pmax (%/°C)", 0.0, 1.0, float(abs(specs.get("temp_coeff_pmax", 0) or 0)), key=f"tc_{idx}")
-            deg_y1 = st.number_input("Y1 Degradation (%)", 0.0, 5.0, float(specs.get("deg_y1_pct", 0) or 0), key=f"deg_y1_{idx}")
-            deg_ann = st.number_input("Annual Degradation (%)", 0.0, 1.0, float(specs.get("deg_annual_pct", 0) or 0), key=f"deg_ann_{idx}")
-            pw = st.number_input("Power Warranty (years)", 0, 40, int(specs.get("warranty_power", 0) or 0), key=f"pw_{idx}")
-            noct = st.number_input("NOCT (°C)", 0, 60, int(specs.get("noct", 0) or 0), key=f"noct_{idx}")
-
-        specs.update(
-            vmp=vmp,
-            imp=imp,
-            voc=voc,
-            isc=isc,
-            efficiency_pct=eff,
-            temp_coeff_pmax=-tc,
-            deg_y1_pct=deg_y1,
-            deg_annual_pct=deg_ann,
-            warranty_power=pw,
-            noct=noct,
-        )
-
-        return specs
-
-# Module count selector + individual uploaders
-st.markdown("---")
-st.header("📄 Module Datasheets")
-n_modules = st.number_input("Number of modules to compare", 2, 5, 2, 1, key="n_mod",
-                            help="Select how many modules to compare (2-5)")
-module_specs_list = []
-for i in range(n_modules):
-    specs = render_module_ui(i)
-    module_specs_list.append(specs)
-
-# ----- Apply loaded configuration overrides -----
-_cfg = st.session_state.get("cfg")
-if _cfg:
-    plant_capacity = _cfg.get("plant_capacity", plant_capacity)
-    latitude = _cfg.get("latitude", latitude)
-    longitude = _cfg.get("longitude", longitude)
-    ppa_tariff = _cfg.get("ppa_tariff", ppa_tariff)
-    tariff_esc = _cfg.get("tariff_esc", tariff_esc)
-    debt_ratio = _cfg.get("debt_ratio", debt_ratio)
-    interest_rate = _cfg.get("interest_rate", interest_rate)
-    loan_tenure = _cfg.get("loan_tenure", loan_tenure)
-    discount_rate = _cfg.get("discount_rate", discount_rate)
-    bos_cost = _cfg.get("bos_cost", bos_cost)
-    ground_albedo = _cfg.get("ground_albedo", ground_albedo)
-    mounting_height_m = _cfg.get("mounting_height_m", mounting_height_m)
-    mounting_type = _cfg.get("mounting_type", mounting_type)
-    tilt_angle = _cfg.get("tilt_angle", tilt_angle)
-    w_lcoe = _cfg.get("w_lcoe", w_lcoe)
-    w_irr = _cfg.get("w_irr", w_irr)
-    w_gen = _cfg.get("w_gen", w_gen)
-    w_deg = _cfg.get("w_deg", w_deg)
-    w_warr = _cfg.get("w_warr", w_warr)
-    w_price = _cfg.get("w_price", w_price)
-    w_tc = _cfg.get("w_tc", w_tc)
-    _cfg_cur = get_currency(_cfg.get("currency_code", currency_code))
-    # Keep original cur (with "code" key); just update formatter and code
-    F = make_formatter(_cfg_cur)
+    # read all inputs from session state fallbacks
+    customer_name = st.session_state.get("s_customer", "Raghavan")
+    customer_company = st.session_state.get("s_company", "Raghavan Group")
+    project_name = st.session_state.get("s_project", "19.6 MW Solar Plant - Pudukottai")
+    location = st.session_state.get("s_location", "Pudukottai, Tamilnadu, India")
+    mounting_type = st.session_state.get("s_mounting", "Fixed Tilt")
+    plant_capacity = st.session_state.get("s_cap", 19.6)
+    latitude = st.session_state.get("s_lat", 10.38)
+    longitude = st.session_state.get("s_lon", 78.82)
+    tilt_angle = st.session_state.get("s_tilt", 10)
+    n_modules = st.session_state.get("n_mod", 2)
+    module_specs_list = st.session_state.get("module_specs_list", [])
+    weather_source = st.session_state.get("s_ws", "NASA POWER API")
+    ground_albedo = st.session_state.get("s_albedo", 0.20)
+    mounting_height_m = st.session_state.get("s_height", 1.0)
+    currency_option = st.session_state.get("s_cur", "INR - Indian Rupee (₹)")
+    ppa_tariff = st.session_state.get("s_ppa", 4.50)
+    tariff_esc = st.session_state.get("s_esc", 0.0)
+    debt_ratio = st.session_state.get("s_debt", 0.70)
+    interest_rate = st.session_state.get("s_int", 0.09)
+    loan_tenure = st.session_state.get("s_tenure", 15)
+    bos_cost = st.session_state.get("s_bos", 12.0)
+    discount_rate = st.session_state.get("s_dr", 0.10)
+    w_lcoe = st.session_state.get("w_lcoe", 20)
+    w_irr = st.session_state.get("w_irr", 20)
+    w_gen = st.session_state.get("w_gen", 15)
+    w_deg = st.session_state.get("w_deg", 10)
+    w_warr = st.session_state.get("w_warr", 10)
+    w_price = st.session_state.get("w_price", 15)
+    w_tc = st.session_state.get("w_tc", 10)
+    cur = get_currency(code_from_option(currency_option))
+    F = make_formatter(cur)
     sym = F["symbol"]
-    currency_code = _cfg.get("currency_code", currency_code)
-    for _i, _cm in enumerate(_cfg.get("modules", [])):
-        if _i < len(module_specs_list) and module_specs_list[_i] is not None:
-            module_specs_list[_i]["price_per_wp"] = _cm.get(
-                "price_per_wp", module_specs_list[_i].get("price_per_wp"))
-            module_specs_list[_i]["bifacial"] = _cm.get(
-                "bifacial", module_specs_list[_i].get("bifacial", False))
+    currency_code = code_from_option(currency_option)
+    total_w = w_lcoe + w_irr + w_gen + w_deg + w_warr + w_price + w_tc
 
-def _get_mfr_name(specs, idx, fallback="Module"):
-    if specs:
-        mfr = specs.get("manufacturer", "")
-        if mfr:
-            return _clean_name(mfr)
-    uploaded_widget = st.session_state.get(f"upload_{idx}")
-    if uploaded_widget and hasattr(uploaded_widget, "name"):
-        mfr = os.path.splitext(uploaded_widget.name)[0]
-        if mfr:
-            return _clean_name(mfr)
-    return fallback
+    # validate
+    uploaded_all = all(s is not None for s in module_specs_list) and len(module_specs_list) >= 2
+    if not uploaded_all:
+        st.warning("Upload datasheets for all modules in Step 2 before generating the report.")
+        st.button("← Back to Modules", on_click=lambda: setattr(st.session_state, "step", 1))
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
 
-def _clean_name(name, max_len=22):
-    """Clean module name for display: replace separators, truncate."""
-    name = name.replace("_", " ").replace("-", " ").replace("  ", " ")
-    if len(name) > max_len:
-        name = name[:max_len].rsplit(" ", 1)[0] if " " in name[:max_len] else name[:max_len]
-    return name.strip()
+    if total_w != 100:
+        st.warning(f"Scoring weights sum to {total_w}% (must be 100%). Please adjust in Step 3.")
+        st.button("← Back to Priorities", on_click=lambda: setattr(st.session_state, "step", 2))
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
 
-# ===== GENERATE REPORT =====
-st.markdown("---")
-uploaded_all = all(s is not None for s in module_specs_list)
-
-if uploaded_all:
-    if weather_source == "NASA POWER API (Recommended)":
+    # map weather source
+    if weather_source == "NASA POWER API":
         ws = "api"
+    elif weather_source == "PVGIS TMY API":
+        ws = "pvgis"
     else:
         ws = "estimate"
 
     project_params = {
-        "capacity_mw": plant_capacity,
-        "latitude": latitude,
-        "longitude": longitude,
-        "ppa_tariff": ppa_tariff,
-        "debt_ratio": debt_ratio,
-        "interest_rate": interest_rate,
-        "loan_tenure": loan_tenure,
-        "tax_rate": 0.2517,
-        "discount_rate": discount_rate,
-        "om_per_mw": 180000,
-        "om_esc": 0.03,
-        "bos_per_w": bos_cost,
-        "insurance_rate": 0.003,
-        "mounting_type": mounting_type,
-        "tilt_angle": tilt_angle,
-        "tariff_esc": tariff_esc,
-        "weather_source": ws,
-        "ground_albedo": ground_albedo,
-        "mounting_height_m": mounting_height_m,
+        "capacity_mw": plant_capacity, "latitude": latitude, "longitude": longitude,
+        "ppa_tariff": ppa_tariff, "debt_ratio": debt_ratio, "interest_rate": interest_rate,
+        "loan_tenure": loan_tenure, "tax_rate": 0.2517, "discount_rate": discount_rate,
+        "om_per_mw": 180000, "om_esc": 0.03, "bos_per_w": bos_cost, "insurance_rate": 0.003,
+        "mounting_type": mounting_type, "tilt_angle": tilt_angle, "tariff_esc": tariff_esc,
+        "weather_source": ws, "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
         "currency": cur,
     }
 
-    # Build module list for financial engine
+    # build mod list
+    def _get_mfr_name(specs, idx, fallback="Module"):
+        if specs:
+            mfr = specs.get("manufacturer", "")
+            if mfr:
+                return mfr.replace("_"," ").replace("-"," ").strip()[:22]
+        fname = st.session_state.get(f"upload_{idx}")
+        if fname and hasattr(fname, "name"):
+            return os.path.splitext(fname.name)[0].replace("_"," ").strip()[:22]
+        return fallback
+
     mod_list = []
     for i, specs in enumerate(module_specs_list):
         if specs is None:
             continue
         mfr = _get_mfr_name(specs, i)
-        cap_w = specs.get("power_wp") or 600
-        eff = specs.get("efficiency_pct") or 21.0
-        tc = specs.get("temp_coeff_pmax") or -0.35
-        deg_y1 = specs.get("deg_y1_pct") or 2.0
-        deg_ann = specs.get("deg_annual_pct") or 0.55
-        price = specs.get("price_per_wp") or 20.0
         mod_list.append({
-            "name": mfr,
-            "short": mfr,
-            "capacity_w": cap_w,
-            "efficiency_pct": eff,
-            "temp_coeff_pmax": tc,
-            "deg_y1_pct": deg_y1,
-            "deg_annual_pct": deg_ann,
-            "price_per_wp": price,
+            "name": mfr, "short": mfr, "capacity_w": specs.get("power_wp") or 600,
+            "efficiency_pct": specs.get("efficiency_pct") or 21.0,
+            "temp_coeff_pmax": specs.get("temp_coeff_pmax") or -0.35,
+            "deg_y1_pct": specs.get("deg_y1_pct") or 2.0,
+            "deg_annual_pct": specs.get("deg_annual_pct") or 0.55,
+            "price_per_wp": specs.get("price_per_wp") or 20.0,
             "warranty_yrs": specs.get("warranty_power") or 25,
             "technology": specs.get("technology", "Mono PERC"),
             "bifacial": specs.get("bifacial", False),
             "noct": specs.get("noct") or 43,
         })
 
+    # Show Generate/Regenerate button if needed
+    if not st.session_state.report_generated or st.session_state.inputs_dirty:
+        status_msg = "Regenerate Report" if st.session_state.report_generated else "Ready to Generate Report"
+        detail = "Inputs have been modified since last generation." if st.session_state.inputs_dirty else f"{len(mod_list)} modules configured | {plant_capacity} MW DC | {location}"
+        st.markdown(f"""<div style="text-align:center;padding:2rem;background:{t['card']};border:1px solid {t['border']};border-radius:10px;margin:1rem 0">
+            <div style="font-family:'Playfair Display',serif;font-size:1.2rem;color:{t['heading']};margin-bottom:0.5rem">{status_msg}</div>
+            <p style="font-size:0.8rem;color:{t['muted']};margin:0">{detail}</p>
+        </div>""", unsafe_allow_html=True)
+
+        btn_label = "Regenerate Investor-Grade Report" if st.session_state.report_generated else "Generate Investor-Grade Report"
+        if st.button(btn_label, key="gen_report_btn", type="primary", use_container_width=True):
+            st.session_state.inputs_dirty = False
+            st.session_state.report_generated = True
+            st.rerun()
+
+        # If we have old results, show them below the button
+        if st.session_state.report_generated and st.session_state.results is not None:
+            st.info("Showing previous results below. Click regenerate to update.")
+            results = st.session_state.results
+            chart_paths = st.session_state.chart_paths
+            scored = st.session_state.project_info.get("scored", [])
+            mod_names = list(results.keys())
+        else:
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.stop()
+
+    # ---- We have fresh or existing results to display ----
+    if st.session_state.report_generated and st.session_state.results is not None and not st.session_state.inputs_dirty:
+        results = st.session_state.results
+        chart_paths = st.session_state.chart_paths
+        scored = st.session_state.project_info.get("scored", [])
+        mod_names = list(results.keys())
+    elif st.session_state.inputs_dirty:
+        # Should not reach here, but safety stop
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
+
+    # ---- RUN ANALYSIS ----
     with st.spinner("Running comprehensive analysis..."):
         with tempfile.TemporaryDirectory() as tmpdir:
-            weather_data = cached_nasa(latitude, longitude) if ws == "api" else None
-            results, chart_paths = run_analysis(
-                mod_list, project_params, tmpdir, weather_data=weather_data
-            )
+            if ws == "api":
+                weather_data = cached_nasa(latitude, longitude)
+            elif ws == "pvgis":
+                weather_data = cached_pvgis(latitude, longitude)
+            else:
+                weather_data = None
+            results, chart_paths = run_analysis(mod_list, project_params, tmpdir, weather_data=weather_data)
 
-            # Build scoring (normalise weights so they always sum to 100)
-            _raw_weights = {
-                "lcoe": w_lcoe, "irr": w_irr,
-                "generation_yield": w_gen, "degradation": w_deg,
-                "warranty": w_warr, "price": w_price,
-                "temp_coeff": w_tc,
-            }
-            _wsum = sum(_raw_weights.values()) or 1
-            weights = {k: round(v / _wsum * 100) for k, v in _raw_weights.items()}
+            _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
+                      "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
+            _wsum = sum(_raw_w.values()) or 1
+            weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
             scored = compute_scores(results, mod_list, weights)
-
             mod_names = [m["short"] for m in mod_list]
 
-            # Show results
-            st.success("✅ Analysis complete!")
+            # store in session
+            st.session_state.results = results
+            st.session_state.chart_paths = chart_paths
+            st.session_state.project_info = {
+                "project_name": project_name, "customer_name": customer_name,
+                "customer_company": customer_company, "plant_capacity": f"{plant_capacity:.1f}",
+                "location": location, "latitude": str(latitude), "longitude": str(longitude),
+                "date": datetime.now().strftime("%B %Y"), "mounting_type": mounting_type,
+                "tilt_angle": tilt_angle, "scored": scored, "currency": cur,
+                "weather_summary": get_weather_summary(weather_data), "weather_source": weather_source,
+                "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
+                "bifacial_detected": any(s.get("bifacial",False) for s in module_specs_list if s),
+            }
+            st.session_state.mod_list = mod_list
+            st.session_state.weather_data = weather_data
+            st.session_state.project_params = project_params
 
-            # Metrics row
-            metric_cols = st.columns(len(mod_names) + 1)
+    # ---- RESULTS DISPLAY ----
+    st.success("Analysis complete")
+
+    # metrics row
+    metric_cols = st.columns(len(mod_names))
+    for i, name in enumerate(mod_names):
+        r = results[name]
+        with metric_cols[i]:
+            st.metric(f"{name} — IRR", f"{r['irr']*100:.2f}%")
+            st.metric(f"{name} — Project Cost", F["money"](r["total_cost"]))
+    best = scored[0]["short"] if scored else mod_names[0]
+    st.markdown(f"<div style='text-align:center;padding:0.5rem 0;font-size:0.85rem;color:{t['accent']};font-weight:600'>&#10022; Recommended: {best} (Score: {scored[0]['weighted_total']:.1f}/100)</div>", unsafe_allow_html=True)
+
+    # charts
+    st.markdown("### Charts")
+    ch_cols = st.columns(2)
+    ch_names = list(chart_paths.keys())
+    for i, cn in enumerate(ch_names):
+        with ch_cols[i % 2]:
+            if os.path.exists(chart_paths[cn]):
+                st.image(chart_paths[cn], caption=cn.replace(".png","").replace("_"," ").title(), width="stretch")
+
+    # scoring table
+    st.markdown("### Multi-Criteria Scoring")
+    score_headers, score_rows = format_scoring_table(scored)
+    score_df = [dict(zip(score_headers, row)) for row in score_rows]
+    st.table(score_df)
+
+    # scenario
+    with st.expander("Scenario & Sensitivity", expanded=False):
+        sc_c1, sc_c2 = st.columns(2)
+        with sc_c1:
+            scenario_mounting = st.selectbox("Alternate mounting", ["None", "Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"], index=0, key="sc_mount")
+        with sc_c2:
+            force_bif = st.checkbox("Force bifacial for all modules", key="sc_bif")
+        sens_range = st.slider("Sensitivity range (+/- %)", 5, 30, 10, 1, key="sc_range")
+
+        if scenario_mounting != "None" or force_bif:
+            sc_p = dict(project_params)
+            if scenario_mounting != "None":
+                sc_p["mounting_type"] = scenario_mounting
+                if scenario_mounting != "Fixed Tilt":
+                    sc_p["tilt_angle"] = None
+            sc_ml = [dict(m, bifacial=True) for m in mod_list] if force_bif else mod_list
+            with tempfile.TemporaryDirectory() as sc_d:
+                sc_r, _ = run_analysis(sc_ml, sc_p, sc_d, weather_data=weather_data, skip_charts=True)
+            scc = st.columns(len(mod_names))
             for i, name in enumerate(mod_names):
-                r = results[name]
-                with metric_cols[i]:
-                    st.metric(f"{name} - IRR", f"{r['irr']*100:.2f}%")
-                    st.metric(f"{name} - Project Cost", F["money"](r['total_cost']))
-            with metric_cols[-1]:
-                best = scored[0]["short"] if scored else mod_names[0]
-                best_irr = results[best]["irr"] * 100
-                st.metric("🥇 Recommended", best)
-                st.metric("Score", f'{scored[0]["weighted_total"]:.1f}' if scored else "N/A")
+                base = results[name]
+                sc = sc_r[name]
+                with scc[i]:
+                    st.metric(f"{name} IRR", f"{sc['irr']*100:.2f}%", f"{(sc['irr']-base['irr'])*100:+.2f}%")
+                    st.metric(f"{name} NPV", F["money"](sc["npv"]), f"{F['money'](sc['npv']-base['npv'])}")
+                    st.metric(f"{name} LCOE", f"{sc['lcoe']:.3f}", f"{sc['lcoe']-base['lcoe']:+.3f}")
 
-            # Scoring table
-            st.subheader("🏆 Multi-Criteria Scoring")
-            score_headers, score_rows = format_scoring_table(scored)
-            score_df_data = [dict(zip(score_headers, row)) for row in score_rows]
-            st.table(score_df_data)
+        # tornado
+        best_name = scored[0]["short"] if scored else mod_names[0]
+        base_irr = results[best_name]["irr"]*100
+        def _fn_tariff(p,m,s): p2=dict(p); p2["ppa_tariff"]=p["ppa_tariff"]*(1+s/100); return p2,m
+        def _fn_price(p,m,s): m2=[dict(x,price_per_wp=x["price_per_wp"]*(1+s/100)) for x in m]; return p,m2
+        def _fn_int(p,m,s): p2=dict(p); p2["interest_rate"]=p["interest_rate"]*(1+s/100); return p2,m
+        def _fn_debt(p,m,s): p2=dict(p); p2["debt_ratio"]=min(.95,max(.4,p["debt_ratio"]*(1+s/100))); return p2,m
+        def _fn_deg(p,m,s): m2=[dict(x,deg_annual_pct=min(2.0,x["deg_annual_pct"]*(1+s/100))) for x in m]; return p,m2
+        def _fn_eff(p,m,s): m2=[dict(x,efficiency_pct=x["efficiency_pct"]*(1+s/100)) for x in m]; return p,m2
+        def _fn_bos(p,m,s): p2=dict(p); p2["bos_per_w"]=p["bos_per_w"]*(1+s/100); return p2,m
 
-            # Chart previews
-            st.subheader("Chart Preview")
-            ch_cols = st.columns(2)
-            ch_names = list(chart_paths.keys())
-            for i, cn in enumerate(ch_names):
-                with ch_cols[i % 2]:
-                    if os.path.exists(chart_paths[cn]):
-                        st.image(chart_paths[cn],
-                                 caption=cn.replace(".png", "").replace("_", " ").title(),
-                                 width="stretch")
+        drivers = [("PPA Tariff",_fn_tariff),("Module Price",_fn_price),("Interest Rate",_fn_int),
+                   ("Debt Ratio",_fn_debt),("Degradation",_fn_deg),("Efficiency",_fn_eff),("BoS Cost",_fn_bos)]
+        lows, highs, labels = [], [], []
+        for lab, fn in drivers:
+            p_lo, m_lo = fn(project_params, mod_list, -sens_range)
+            p_hi, m_hi = fn(project_params, mod_list, +sens_range)
+            with tempfile.TemporaryDirectory() as d:
+                r_lo, _ = run_analysis(m_lo, p_lo, d, weather_data=weather_data, skip_charts=True)
+                r_hi, _ = run_analysis(m_hi, p_hi, d, weather_data=weather_data, skip_charts=True)
+            lows.append(r_lo[best_name]["irr"]*100 - base_irr)
+            highs.append(r_hi[best_name]["irr"]*100 - base_irr)
+            labels.append(lab)
 
-            # Build spec_rows for report
-            def safe_val(specs, key, default="N/A"):
-                v = specs.get(key, default)
-                return str(v) if v is not None else str(default)
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        for i, lab in enumerate(labels):
+            fig.add_trace(go.Scatter(x=[lows[i],highs[i]], y=[i,i], mode="lines+markers",
+                line=dict(color="gray",width=1.5), marker=dict(size=8,color=["#e74c3c","#27ae60"]), showlegend=False))
+        fig.add_vline(x=0, line=dict(color="white",width=1))
+        fig.update_layout(
+            title=f"IRR Sensitivity — {best_name}",
+            xaxis=dict(title=f"IRR change vs base (%-pts) | base {base_irr:.1f}%", gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(tickmode="array", tickvals=list(range(len(labels))), ticktext=labels),
+            template="none", height=350,
+            paper_bgcolor=t['bg'], plot_bgcolor=t['bg'],
+            font=dict(color=t['muted'], size=10),
+            margin=dict(l=10,r=10,t=40,b=40),
+        )
+        st.plotly_chart(fig, width="stretch")
 
-            spec_rows = []
-            for i, specs in enumerate(module_specs_list):
-                if specs is None:
-                    continue
-                mfr = mod_names[i]
-                spec_rows.append([
-                    f"Module {i+1} Model",
-                    safe_val(specs, "power_wp") + "Wp",
-                    "",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Technology",
-                    safe_val(specs, "technology"),
-                    "",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Manufacturer",
-                    mfr,
-                    "",
-                ])
-                r = results[mfr]
-                spec_rows.append([
-                    f"Module {i+1} Count",
-                    f'{r["module_count"]:,}',
-                    "nos",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Efficiency",
-                    f'{specs.get("efficiency_pct", 0):.2f}%',
-                    "",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Vmp",
-                    f'{specs.get("vmp", 0):.2f}V',
-                    "V",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Imp",
-                    f'{specs.get("imp", 0):.2f}A',
-                    "A",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Voc",
-                    f'{specs.get("voc", 0):.2f}V',
-                    "V",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Isc",
-                    f'{specs.get("isc", 0):.2f}A',
-                    "A",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Temp Coeff",
-                    f'{specs.get("temp_coeff_pmax", 0):.3f}%/C',
-                    "%/°C",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Deg Y1",
-                    f'{specs.get("deg_y1_pct", 0):.1f}%',
-                    "%",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Deg Annual",
-                    f'{specs.get("deg_annual_pct", 0):.2f}%',
-                    "%",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Warranty",
-                    f'{specs.get("warranty_power", 0)}yr',
-                    "years",
-                ])
-                spec_rows.append([
-                    f"Module {i+1} Price",
-                    f'{sym}{specs["price_per_wp"]:.1f}/Wp',
-                    "",
-                ])
+    # CSV export
+    import csv as _csv
+    _buf = io.StringIO()
+    _cw = _csv.writer(_buf)
+    _cw.writerow(["Module","IRR_%","NPV","Total_Cost","LCOE","Gen_Y1_kWh","CUF_%","Payback_yrs","Module_Count"])
+    for n in mod_names:
+        r = results[n]
+        _cw.writerow([n, round(r["irr"]*100,2), round(r["npv"],2), round(r["total_cost"],2), round(r["lcoe"],4),
+                      round(r["gen_y1_kwh"],0), round(r["cuf"]*100,2), r["payback"], r["module_count"]])
+    st.download_button("Export CSV", data=_buf.getvalue(), file_name="comparison_results.csv", mime="text/csv")
 
-            # Build project params list
-            first_r = results[mod_names[0]]
-            project_params_list = [
-                f"Location: {location} ({latitude}, {longitude})",
-                f"Plant Capacity: {plant_capacity:.1f} MW DC",
-                f"Configuration: {mounting_type}{' (Tilt: '+str(tilt_angle)+'°)' if tilt_angle else ''} ground mount",
-                f"PPA Tariff: {sym} {ppa_tariff:.2f}/kWh",
-                "Plant Life: 25 years",
-                f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
-                f"Interest Rate: {interest_rate*100:.0f}% p.a., {loan_tenure}-year tenure",
-                f"BoS & EPC: {sym} {bos_cost:.1f}/Wp (adjusted for module count)",
-                f"Weather: {get_weather_summary(cached_nasa(latitude, longitude) if ws == 'api' else None)}",
-            ]
-            for i, (m, specs) in enumerate(zip(mod_names, module_specs_list)):
-                r_mod = results[m]
-                project_params_list.append(
-                    f"{m}: {r_mod['module_count']:,} units @ {specs['power_wp']}Wp"
-                )
+    # PDF report
+    spec_rows = []
+    for i, specs in enumerate(module_specs_list):
+        if specs is None: continue
+        mfr = _get_mfr_name(specs, i)
+        spec_rows.append([f"Module {i+1} Model", f"{specs.get('power_wp','')}Wp", ""])
+        spec_rows.append([f"Module {i+1} Technology", specs.get("technology",""), ""])
+        spec_rows.append([f"Module {i+1} Manufacturer", mfr, ""])
+        r_mod = results.get(mfr,{})
+        spec_rows.append([f"Module {i+1} Count", f'{r_mod.get("module_count",0):,}', "nos"])
+    mod_info = [{"short":_get_mfr_name(module_specs_list[i], i),
+                 "name":f"{_get_mfr_name(module_specs_list[i], i)} ({module_specs_list[i].get('power_wp','')}Wp)",
+                 "brand":_get_mfr_name(module_specs_list[i], i), "wp":module_specs_list[i].get("power_wp",600)}
+                for i in range(len(module_specs_list)) if module_specs_list[i]]
 
-            bifacial_detected = any(s.get("bifacial", False) for s in module_specs_list if s)
-            if bifacial_detected:
-                project_params_list.append(
-                    f"Analysis includes bifacial gains (albedo={ground_albedo}, height={mounting_height_m}m)"
-                )
-            else:
-                project_params_list.append(
-                    "Analysis: Frontside-only generation (no bifacial gains detected)"
-                )
+    plist = [f"Location: {location} ({latitude}, {longitude})",
+             f"Plant Capacity: {plant_capacity:.1f} MW DC",
+             f"Configuration: {mounting_type}{' (Tilt: '+str(tilt_angle)+'°)' if tilt_angle else ''}",
+             f"PPA Tariff: {sym} {ppa_tariff:.2f}/kWh",
+             f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
+             f"Interest: {interest_rate*100:.0f}% p.a., {loan_tenure}-yr",
+             f"BoS & EPC: {sym} {bos_cost:.1f}/Wp",
+             f"Weather: {get_weather_summary(weather_data)}"]
 
-            # Module info for report
-            mod_info = []
-            for i, (m, specs) in enumerate(zip(mod_names, module_specs_list)):
-                if specs is None:
-                    continue
-                r_mod = results[m]
-                mod_info.append({
-                    "short": m,
-                    "name": f"{_get_mfr_name(specs, i)} ({safe_val(specs, 'power_wp')}Wp)",
-                    "brand": _get_mfr_name(specs, i),
-                    "wp": specs["power_wp"],
-                    "count": r_mod["module_count"],
-                    "dims": (
-                        specs.get("length_mm") or specs.get("length"),
-                        specs.get("width_mm") or specs.get("width"),
-                    ),
-                })
+    p_info = dict(st.session_state.project_info)
+    p_info.update(spec_rows=spec_rows, project_params=plist, mod_info=mod_info)
+    p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
 
-            module_a_name = mod_info[0]["name"] if len(mod_info) > 0 else "Module 1"
-            module_b_name = mod_info[1]["name"] if len(mod_info) > 1 else "Module 2"
-            module_a_short = mod_info[0]["short"] if len(mod_info) > 0 else "Module 1"
-            module_b_short = mod_info[1]["short"] if len(mod_info) > 1 else "Module 2"
+    with tempfile.TemporaryDirectory() as report_dir:
+        report_path = os.path.join(report_dir, "investment_report.pdf")
+        gen_report(results, p_info, report_dir, report_path)
 
-            project_info = {
-                "project_name": project_name,
-                "customer_name": customer_name,
-                "customer_company": customer_company,
-                "plant_capacity": f"{plant_capacity:.1f}",
-                "location": location,
-                "latitude": str(latitude),
-                "longitude": str(longitude),
-                "date": datetime.now().strftime("%B %Y"),
-                "mounting_type": mounting_type,
-                "tilt_angle": tilt_angle,
-                "module_a_name": module_a_name,
-                "module_b_name": module_b_name,
-                "module_a_short": module_a_short,
-                "module_b_short": module_b_short,
-                "spec_rows": spec_rows,
-                "project_params": project_params_list,
-                "mod_info": mod_info,
-                "scored": scored,
-                "score_headers": score_headers,
-                "score_rows": score_rows,
-                "weather_summary": project_params_list[8],
-                "weather_source": weather_source,
-                "ground_albedo": ground_albedo,
-                "mounting_height_m": mounting_height_m,
-                "bifacial_detected": bifacial_detected,
-                "currency": cur,
-            }
+        name_parts = []
+        for i in range(len(module_specs_list)):
+            mfr = _get_mfr_name(module_specs_list[i], i)
+            name_parts.append(mfr.replace("/","_").replace("\\","_").split()[0])
+        report_fn = f"SolarPro_Report_{'_vs_'.join(name_parts)}.pdf"
 
-            # ===================== SCENARIO & SENSITIVITY =====================
-            with st.expander("🔁 Scenario & Sensitivity Analysis", expanded=False):
-                st.markdown("Explore alternate assumptions — changes re-run the model instantly.")
-                sc_col1, sc_col2 = st.columns(2)
-                with sc_col1:
-                    scenario_mounting = st.selectbox(
-                        "Alternate mounting type",
-                        ["None", "Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"],
-                        index=0,
-                    )
-                with sc_col2:
-                    force_bif = st.checkbox("Force bifacial gain for all modules")
+        with open(report_path, "rb") as f:
+            st.download_button("Download Investment-Grade PDF Report", data=f.read(),
+                               file_name=report_fn, mime="application/pdf", type="primary")
 
-                sens_range = st.slider("Sensitivity range (+/- %)", 5, 30, 10, 1)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-                if scenario_mounting != "None" or force_bif:
-                    sc_params = dict(project_params)
-                    if scenario_mounting != "None":
-                        sc_params["mounting_type"] = scenario_mounting
-                        if scenario_mounting != "Fixed Tilt":
-                            sc_params["tilt_angle"] = None
-                    sc_mod_list = [dict(m, bifacial=True) for m in mod_list] if force_bif else mod_list
-                    with tempfile.TemporaryDirectory() as sc_dir:
-                        sc_results, _ = run_analysis(
-                            sc_mod_list, sc_params, sc_dir,
-                            weather_data=weather_data, skip_charts=True,
-                        )
-                    st.markdown(f"**Scenario vs Base** — "
-                                f"{scenario_mounting if scenario_mounting != 'None' else 'frontside'}"
-                                f"{' + bifacial' if force_bif else ''}")
-                    sc_cols = st.columns(len(mod_names))
-                    for i, name in enumerate(mod_names):
-                        base = results[name]
-                        sc = sc_results[name]
-                        with sc_cols[i]:
-                            st.metric(f"{name} IRR", f"{sc['irr']*100:.2f}%",
-                                      f"{(sc['irr']-base['irr'])*100:+.2f}%")
-                            st.metric(f"{name} NPV", F["money"](sc['npv']),
-                                      f"{F['money'](sc['npv']-base['npv'])}")
-                            st.metric(f"{name} LCOE", f"{sc['lcoe']:.3f}",
-                                      f"{sc['lcoe']-base['lcoe']:+.3f}")
-
-                # Tornado chart for the recommended module
-                best_name = scored[0]["short"] if scored else mod_names[0]
-                base_irr = results[best_name]["irr"] * 100
-
-                def _apply_tariff(p, m, s):
-                    p2 = dict(p); p2["ppa_tariff"] = p["ppa_tariff"] * (1 + s / 100); return p2, m
-                def _apply_price(p, m, s):
-                    m2 = [dict(x, price_per_wp=x["price_per_wp"] * (1 + s / 100)) for x in m]; return p, m2
-                def _apply_interest(p, m, s):
-                    p2 = dict(p); p2["interest_rate"] = p["interest_rate"] * (1 + s / 100); return p2, m
-                def _apply_debt(p, m, s):
-                    p2 = dict(p); p2["debt_ratio"] = min(0.95, max(0.4, p["debt_ratio"] * (1 + s / 100))); return p2, m
-                def _apply_deg(p, m, s):
-                    m2 = [dict(x, deg_annual_pct=min(2.0, x["deg_annual_pct"] * (1 + s / 100))) for x in m]; return p, m2
-                def _apply_eff(p, m, s):
-                    m2 = [dict(x, efficiency_pct=x["efficiency_pct"] * (1 + s / 100)) for x in m]; return p, m2
-                def _apply_bos(p, m, s):
-                    p2 = dict(p); p2["bos_per_w"] = p["bos_per_w"] * (1 + s / 100); return p2, m
-
-                _drivers = [
-                    ("PPA Tariff", _apply_tariff),
-                    ("Module Price", _apply_price),
-                    ("Interest Rate", _apply_interest),
-                    ("Debt Ratio", _apply_debt),
-                    ("Degradation", _apply_deg),
-                    ("Efficiency", _apply_eff),
-                    ("BoS Cost", _apply_bos),
-                ]
-                _lows, _highs, _labels = [], [], []
-                for _lab, _fn in _drivers:
-                    _p_lo, _m_lo = _fn(project_params, mod_list, -sens_range)
-                    _p_hi, _m_hi = _fn(project_params, mod_list, +sens_range)
-                    with tempfile.TemporaryDirectory() as _d:
-                        _r_lo, _ = run_analysis(_m_lo, _p_lo, _d, weather_data=weather_data, skip_charts=True)
-                        _r_hi, _ = run_analysis(_m_hi, _p_hi, _d, weather_data=weather_data, skip_charts=True)
-                    _lows.append(_r_lo[best_name]["irr"] * 100 - base_irr)
-                    _highs.append(_r_hi[best_name]["irr"] * 100 - base_irr)
-                    _labels.append(_lab)
-
-                import plotly.graph_objects as _go
-                _fig = _go.Figure()
-                for i, _lab in enumerate(_labels):
-                    _fig.add_trace(_go.Scatter(
-                        x=[_lows[i], _highs[i]], y=[i, i],
-                        mode="lines+markers",
-                        line=dict(color="gray", width=1.5),
-                        marker=dict(size=8, color=["#e74c3c", "#27ae60"]),
-                        showlegend=False,
-                    ))
-                _fig.add_vline(x=0, line=dict(color="black", width=1))
-                _fig.update_layout(
-                    title=f"Tornado - IRR sensitivity ({best_name})",
-                    xaxis=dict(title=f"IRR change vs base (%-pts)  |  base IRR {base_irr:.1f}%",
-                               gridcolor="#eee"),
-                    yaxis=dict(tickmode="array", tickvals=list(range(len(_labels))),
-                               ticktext=_labels),
-                    template="none",
-                    height=400,
-                    margin=dict(l=20, r=20, t=40, b=60),
-                )
-                st.plotly_chart(_fig, width='stretch')
-
-            # ===================== CSV EXPORT =====================
-            import csv as _csv
-            import io as _io
-            _buf = _io.StringIO()
-            _cw = _csv.writer(_buf)
-            _cw.writerow(["Module", "IRR_%", "NPV", "Total_Cost", "LCOE",
-                          "Gen_Y1_kWh", "CUF_%", "Payback_yrs", "Module_Count"])
-            for _n in mod_names:
-                _r = results[_n]
-                _cw.writerow([_n, round(_r["irr"] * 100, 2), round(_r["npv"], 2),
-                              round(_r["total_cost"], 2), round(_r["lcoe"], 4),
-                              round(_r["gen_y1_kwh"], 0), round(_r["cuf"] * 100, 2),
-                              _r["payback"], _r["module_count"]])
-            st.download_button(
-                "📊 Export Results (CSV)",
-                data=_buf.getvalue(),
-                file_name="comparison_results.csv",
-                mime="text/csv",
-            )
-
-            # ===================== SAVE CONFIG =====================
-            _cfg_out = {
-                "plant_capacity": plant_capacity, "latitude": latitude, "longitude": longitude,
-                "ppa_tariff": ppa_tariff, "tariff_esc": tariff_esc, "debt_ratio": debt_ratio,
-                "interest_rate": interest_rate, "loan_tenure": loan_tenure, "discount_rate": discount_rate,
-                "bos_cost": bos_cost, "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
-                "mounting_type": mounting_type, "tilt_angle": tilt_angle,
-                "currency_code": currency_code,
-                "w_lcoe": w_lcoe, "w_irr": w_irr, "w_gen": w_gen, "w_deg": w_deg,
-                "w_warr": w_warr, "w_price": w_price, "w_tc": w_tc,
-                "modules": [
-                    {"price_per_wp": s.get("price_per_wp"), "bifacial": s.get("bifacial", False),
-                     "power_wp": s.get("power_wp"), "technology": s.get("technology")}
-                    for s in module_specs_list if s
-                ],
-            }
-            st.download_button(
-                "💾 Save Configuration",
-                data=json.dumps(_cfg_out, indent=2),
-                file_name="solar_config.json",
-                mime="application/json",
-            )
-
-            report_path = os.path.join(tmpdir, "investment_report.pdf")
-            gen_report(results, project_info, tmpdir, report_path)
-
-            # Build dynamic filename
-            def get_mfr_name_for_file(specs, i):
-                mfr = _get_mfr_name(specs, i)
-                return mfr.replace("/", "_").replace("\\", "_").split()[0]
-
-            name_parts = [get_mfr_name_for_file(module_specs_list[i], i)
-                          for i in range(len(module_specs_list))]
-            report_filename = f"Comparison_Report_{'_vs_'.join(name_parts)}.pdf"
-
-            with open(report_path, "rb") as f:
-                report_data = f.read()
-            st.download_button(
-                "📥 PRINT / SAVE INVESTMENT GRADE PDF REPORT",
-                data=report_data,
-                file_name=report_filename,
-                mime="application/pdf",
-                width="stretch",
-                type="primary",
-            )
-            st.info("The report includes: Executive Summary, Project Details, "
-                    "Module Specifications, CAPEX, Energy Projections, Cash Flow, "
-                    "Financial Metrics (IRR/NPV/LCOE), Multi-Criteria Scoring, "
-                    "Risk Analysis, and Recommendation.")
-if not uploaded_all:
-    st.info("Upload datasheets for all modules in the expanders above to proceed.")
+# Footer with theme switcher
+footer_html = f"""<div style="text-align:center;padding:1.2rem;font-size:0.6rem;color:{t['dim']};font-family:DM Mono,monospace;border-top:1px solid {t['border']}">
+SOLAR<span style="color:{t['link']}">PRO</span> · PV Module Financial Intelligence
+<br><a href="#" onclick="window.parent.document.querySelector('[data-testid=stSidebar]').click();return false;" style="color:{t['accent']};font-size:0.55rem;text-decoration:underline;cursor:pointer">Change Theme</a>
+</div>"""
+st.markdown(footer_html, unsafe_allow_html=True)

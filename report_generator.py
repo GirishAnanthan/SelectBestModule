@@ -728,15 +728,15 @@ def generate_report(results, project_info, chart_dir, output_path):
               caption="Net income after tax. Early years lower due to interest and WDV depreciation; improves as debt reduces.",
               w_mm=pdf.w - pdf.l_margin - pdf.r_margin)
 
-    # =========================================================
-    # 6. KEY FINANCIAL METRICS COMPARISON
-    # =========================================================
-    pdf.stitle("6. Key Financial Metrics Comparison")
-
     irr_path = os.path.join(chart_dir, "chart_irr_npv.png")
     pdf.chart(irr_path,
               caption="IRR = annualised return on equity over 25 years. NPV = present value of all cash flows at WACC. Higher is better for both.",
               w_mm=90, center=True)
+
+    # =========================================================
+    # 6. KEY FINANCIAL METRICS COMPARISON
+    # =========================================================
+    pdf.stitle("6. Key Financial Metrics Comparison")
 
     cc2 = _fw(pdf, [2.5] + [1.5] * n_mods)
     cc2_headers = ["Financial Metric"] + [mod_info[i]["short"] if i < len(mod_info) else mod_names[i]
@@ -800,11 +800,11 @@ def generate_report(results, project_info, chart_dir, output_path):
         pdf.ln(1)
 
     # =========================================================
-    # 7. PVSYST LOSS ANALYSIS
+    # 7. ENERGY LOSS ANALYSIS
     # =========================================================
-    pdf.stitle("7. PVSyst-Style Loss Analysis")
+    pdf.stitle("7. Energy Loss Analysis")
     pdf.ptext(
-        "Detailed energy loss breakdown modeled on PVSyst methodology. "
+        "Detailed energy loss breakdown from irradiance to grid injection. "
         "Losses are applied sequentially from POA irradiance to grid injection."
     )
 

@@ -8,9 +8,10 @@ import numpy_financial as npf
 import json, os, logging
 
 from weather_data import (
-    fetch_nasa_power_monthly, compute_annual_solar_metrics,
+    fetch_nasa_power_monthly, fetch_pvgis_monthly,
+    compute_annual_solar_metrics,
     adjust_cuf_for_module, compute_bifacial_gain, get_weather_summary,
-    compute_monthly_breakdown, compute_pvsyst_losses,
+    compute_monthly_breakdown, compute_energy_losses,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
         (results dict keyed by module short name, chart paths dict)
     """
     n_mods = len(module_list)
-    DEP_SCHEDULE = [0.40, 0.20, 0.10] + [0.04375] * 7 + [0] * 15
+    DEP_SCHEDULE = [0.40, 0.20, 0.10] + [0.30 / 7] * 7 + [0] * 15
 
     # Fetch weather data once for the site
     lat = project_params["latitude"]
@@ -56,6 +57,8 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
 
     if weather_source == "api" and weather_data is None:
         weather_data = fetch_nasa_power_monthly(lat, lon)
+    elif weather_source == "pvgis" and weather_data is None:
+        weather_data = fetch_pvgis_monthly(lat, lon)
     if weather_data is not None:
         solar_metrics = compute_annual_solar_metrics(
             lat, lon, weather_data,
@@ -181,7 +184,18 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
         npv = npf.npv(project_params["discount_rate"], fcf_arr)
         if npv is None or (isinstance(npv, float) and np.isnan(npv)):
             npv = 0.0
-        lcoe = total_cost / total_gen if total_gen > 0 else 0.0
+
+        disc_rate = project_params["discount_rate"]
+        discounted_cost = float(total_cost)
+        discounted_energy = 0.0
+        for yr in range(1, 26):
+            dg = 1 - mod["deg_y1_pct"] / 100
+            if yr > 1:
+                dg *= (1 - mod["deg_annual_pct"] / 100) ** (yr - 1)
+            gen_kwh = gen_y1_kwh * dg
+            discounted_energy += gen_kwh / (1 + disc_rate) ** yr
+            discounted_cost += float(om_arr[yr] + ins_arr[yr]) / (1 + disc_rate) ** yr
+        lcoe = discounted_cost / discounted_energy if discounted_energy > 0 else 0.0
 
         cum = 0
         payback = None
@@ -191,7 +205,7 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
                 payback = yr
                 break
 
-        # PVSyst-style metrics
+        # Solar simulation metrics
         pvsyst = {
             "annual_ghi": solar_metrics["annual_ghi"],
             "annual_poa": solar_metrics["annual_poa"],
@@ -207,8 +221,8 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
             {}, gen_y1_kwh, cuf, module_capacity_kw,
         )
 
-        # PVSyst loss breakdown
-        loss_series, loss_factors = compute_pvsyst_losses(
+        # Loss breakdown
+        loss_series, loss_factors = compute_energy_losses(
             mod.get("temp_coeff_pmax", -0.35),
             mod.get("noct", 43),
             avg_temp, cuf,
@@ -299,7 +313,7 @@ def generate_charts(results, module_list, project_params, chart_dir, currency=No
         ]
         ni = [r["net_income"][i] / 1e7 for i in range(len(r["net_income"]))]
         dscr = [0] + [
-            (r["net_income"][i] + r["depreciation"][i]) / (r["interest"][i] + r["principal"][i])
+            (r["net_income"][i] + r["interest"][i] + r["depreciation"][i]) / (r["interest"][i] + r["principal"][i])
             if i < 16 and (r["interest"][i] + r["principal"][i]) > 0 else 0
             for i in range(1, 26)
         ]
@@ -472,7 +486,7 @@ def _make_pie_chart(data, labels, title, fn, sym, rate, div, unit="Cr"):
 
 
 def _make_loss_diagram(loss_series, module_name, fn):
-    """PVSyst-style waterfall loss diagram from irradiance to grid (plotly)."""
+    """Waterfall loss diagram from irradiance to grid (plotly)."""
     import plotly.graph_objects as go
     import plotly.io as pio
     labels = ["POA Irradiance"]
@@ -499,7 +513,7 @@ def _make_loss_diagram(loss_series, module_name, fn):
         totals=dict(marker=dict(color="#2ecc71")),
     ))
     fig.update_layout(
-        title=dict(text=f"PVSyst-Style Loss Diagram — {module_name}",
+        title=dict(text=f"Energy Loss Diagram — {module_name}",
                    font=dict(size=12, color="#003366")),
         yaxis=dict(title="Energy (% of POA)", range=[0, 108], gridcolor="#eee"),
         template="none",

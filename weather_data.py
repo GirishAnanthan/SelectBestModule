@@ -1,5 +1,5 @@
 """
-Weather Data Module - NASA POWER API Integration
+Weather Data Module - NASA POWER & PVGIS TMY API Integration
 Fetches real meteorological data (GHI, DNI, temperature, wind) for solar analysis.
 Falls back to heuristic estimates if API is unavailable.
 """
@@ -13,12 +13,40 @@ try:
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
-    logger.warning("requests not installed; NASA POWER API unavailable")
+    logger.warning("requests not installed; weather APIs unavailable")
 
+_DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+
+def _days_in_month(year, month):
+    if month == 2 and year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
+        return 29
+    return _DAYS_IN_MONTH[month - 1]
+
+
+def _nasa_daily_to_monthly(raw_dict):
+    """Convert NASA POWER daily-average values to monthly totals (kWh/m²/month).
+    raw_dict has keys like '202001' with daily avg values.
+    Returns dict with '01','02',... keys with monthly total values.
+    """
+    result = {}
+    for key, val in raw_dict.items():
+        if val is not None:
+            year = int(key[:4])
+            month = int(key[4:6])
+            result[f"{month:02d}"] = val * _days_in_month(year, month)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# NASA POWER
+# ---------------------------------------------------------------------------
 
 def fetch_nasa_power_monthly(lat, lon, start_year=2020, end_year=2024):
     """Fetch monthly solar meteorology from NASA POWER REST API.
     Returns dict of monthly arrays or None on failure.
+    Values are converted to monthly totals (kWh/m²/month) for GHI/DNI and
+    monthly average temperature (°C).
     """
     if not HAS_REQUESTS:
         logger.warning("Cannot fetch NASA POWER data: requests library not installed")
@@ -50,31 +78,131 @@ def fetch_nasa_power_monthly(lat, lon, start_year=2020, end_year=2024):
 
         monthly = {}
         for param in params:
-            values = properties.get(param, {})
-            monthly[param] = values
+            raw = properties.get(param, {})
+            if param == "T2M" or param == "WS2M":
+                monthly[param] = {k[4:]: v for k, v in raw.items() if v is not None}
+            else:
+                monthly[param] = _nasa_daily_to_monthly(raw)
         return monthly
     except Exception as e:
         logger.warning(f"NASA POWER API call failed: {e}")
         return None
 
 
+# ---------------------------------------------------------------------------
+# PVGIS (Typical Meteorological Year)
+# ---------------------------------------------------------------------------
+
+def fetch_pvgis_monthly(lat, lon):
+    """Fetch typical meteorological year data from PVGIS API v5.2.
+    Aggregates hourly TMY data to monthly totals.
+    Returns dict with keys:
+        PVGIS_GHI:  {'01': val, ...}  kWh/m²/month
+        PVGIS_DNI:  {'01': val, ...}  kWh/m²/month
+        PVGIS_TEMP: {'01': val, ...}  °C
+        PVGIS_WS:   {'01': val, ...}  m/s
+    or None on failure.
+    """
+    if not HAS_REQUESTS:
+        logger.warning("Cannot fetch PVGIS data: requests library not installed")
+        return None
+
+    url = (
+        f"https://re.jrc.ec.europa.eu/api/v5_2/tmy"
+        f"?lat={lat}&lon={lon}&outputformat=json"
+    )
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        hourly = data.get("outputs", {}).get("tmy_hourly", [])
+        if not hourly:
+            return None
+
+        acc = {m: {"ghi": 0.0, "dni": 0.0, "temp": 0.0, "ws": 0.0, "n": 0}
+               for m in range(1, 13)}
+        for h in hourly:
+            ts = h.get("time(UTC)", "")
+            if len(ts) < 6:
+                continue
+            month = int(ts[4:6])
+            acc[month]["ghi"] += h.get("G(h)", 0)
+            acc[month]["dni"] += h.get("Gb(n)", 0)
+            acc[month]["temp"] += h.get("T2m", 25)
+            acc[month]["ws"] += h.get("WS10m", 0)
+            acc[month]["n"] += 1
+
+        result = {}
+        ghi_m = {}
+        dni_m = {}
+        temp_m = {}
+        ws_m = {}
+        for m in range(1, 13):
+            d = acc[m]
+            ghi_m[f"{m:02d}"] = round(d["ghi"] / 1000, 1)
+            dni_m[f"{m:02d}"] = round(d["dni"] / 1000, 1)
+            temp_m[f"{m:02d}"] = round(d["temp"] / d["n"], 1) if d["n"] > 0 else 25.0
+            ws_m[f"{m:02d}"] = round(d["ws"] / d["n"], 1) if d["n"] > 0 else 0.0
+        result["PVGIS_GHI"] = ghi_m
+        result["PVGIS_DNI"] = dni_m
+        result["PVGIS_TEMP"] = temp_m
+        result["PVGIS_WS"] = ws_m
+        return result
+    except Exception as e:
+        logger.warning(f"PVGIS API call failed: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Data aggregation helpers
+# ---------------------------------------------------------------------------
+
+def _extract_monthly_data(weather_data):
+    """Extract GHI, DNI, and temperature monthly dicts from any supported format.
+    Returns (ghi_monthly, dni_monthly, temp_monthly, source_name) where each
+    is a dict with '01'..'12' keys. GHI/DNI in kWh/m²/month, temp in °C.
+    """
+    if not weather_data:
+        return None, None, None, None
+
+    if "ALLSKY_SFC_SW_GHI" in weather_data:
+        ghi = weather_data["ALLSKY_SFC_SW_GHI"]
+        dni = weather_data.get("ALLSKY_SFC_SW_DNI", {})
+        temp = weather_data.get("T2M", {})
+        source = "NASA POWER"
+    elif "PVGIS_GHI" in weather_data:
+        ghi = weather_data["PVGIS_GHI"]
+        dni = weather_data.get("PVGIS_DNI", {})
+        temp = weather_data.get("PVGIS_TEMP", {})
+        source = "PVGIS"
+    else:
+        return None, None, None, None
+
+    return ghi, dni, temp, source
+
+
 def compute_annual_solar_metrics(lat, lon, weather_data, mounting_type="Fixed Tilt", tilt_angle=None):
-    """Compute annual solar metrics from NASA POWER data or heuristic fallback.
+    """Compute annual solar metrics from NASA POWER / PVGIS data or heuristic fallback.
     Returns dict with annual_ghi, annual_poa, specific_yield, performance_ratio, cuf, avg_temp.
     """
-    if weather_data and "ALLSKY_SFC_SW_GHI" in weather_data:
-        ghi_values = [v for v in weather_data["ALLSKY_SFC_SW_GHI"].values() if v is not None]
-        t2m_values = [v for v in weather_data.get("T2M", {}).values() if v is not None]
+    ghi_monthly, dni_monthly, temp_monthly, _ = _extract_monthly_data(weather_data)
+
+    if ghi_monthly:
+        ghi_values = [v for v in ghi_monthly.values() if v is not None]
+        temp_values = [v for v in temp_monthly.values() if v is not None] if temp_monthly else []
         if ghi_values:
             annual_ghi = sum(ghi_values)
-            avg_temp = sum(t2m_values) / len(t2m_values) if t2m_values else 25.0
+            avg_temp = sum(temp_values) / len(temp_values) if temp_values else 25.0
         else:
             return _heuristic_metrics(lat, mounting_type, tilt_angle)
     else:
         return _heuristic_metrics(lat, mounting_type, tilt_angle)
 
-    dni_values = [v for v in weather_data.get("ALLSKY_SFC_SW_DNI", {}).values() if v is not None]
-    annual_dni = sum(dni_values) if dni_values else annual_ghi * 0.55
+    if dni_monthly:
+        dni_values = [v for v in dni_monthly.values() if v is not None]
+        annual_dni = sum(dni_values) if dni_values else annual_ghi * 0.55
+    else:
+        annual_dni = annual_ghi * 0.55
 
     if mounting_type == "Fixed Tilt":
         opt_tilt = _get_optimal_tilt(lat)
@@ -110,7 +238,7 @@ def _get_optimal_tilt(latitude):
 
 
 def _heuristic_metrics(lat, mounting_type="Fixed Tilt", tilt_angle=None):
-    """Fallback heuristic when NASA POWER is unavailable."""
+    """Fallback heuristic when API data is unavailable."""
     lat = float(lat)
     ghi = 2100 - 5 * abs(lat - 10)
 
@@ -176,7 +304,7 @@ def compute_bifacial_gain(albedo, mounting_height_m, tilt_angle, ghi_annual, bif
     if tilt_angle is None:
         tilt_angle = 10
     tilt_rad = math.radians(tilt_angle)
-    view_factor = (1 - math.cos(math.radians(90 - tilt_angle))) / 2
+    view_factor = (1 + math.cos(tilt_rad)) / 2
     height_factor = min(1.0, 1 + 0.1 * math.log(max(mounting_height_m, 0.1) / 0.5))
 
     rear_irradiance = ghi_annual * albedo * view_factor * height_factor
@@ -194,22 +322,26 @@ def compute_bifacial_gain(albedo, mounting_height_m, tilt_angle, ghi_annual, bif
 
 def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors,
                                gen_y1_kwh, cuf, module_capacity_kw):
-    """Compute monthly generation, PR, and yield from NASA POWER monthly data.
+    """Compute monthly generation, PR, and yield from weather data.
     Returns list of 12 dicts, one per month.
     """
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    ghi_monthly = weather_data.get("ALLSKY_SFC_SW_GHI", {}) if weather_data else {}
-    t2m_monthly = weather_data.get("T2M", {}) if weather_data else {}
+
+    ghi_monthly, _, temp_monthly, _ = _extract_monthly_data(weather_data)
+
+    if not ghi_monthly:
+        ghi_monthly = {}
+        temp_monthly = {}
 
     ghi_values = [v for v in ghi_monthly.values() if v is not None]
     total_ghi = sum(ghi_values) if ghi_values else annual_ghi
 
     monthly_data = []
     for m_idx in range(12):
-        m_key = list(ghi_monthly.keys())[m_idx] if ghi_monthly and len(ghi_monthly) > m_idx else f"{m_idx+1:02d}"
+        m_key = f"{m_idx+1:02d}"
         m_ghi = ghi_monthly.get(m_key, annual_ghi / 12) if ghi_monthly else annual_ghi / 12
-        m_temp = t2m_monthly.get(m_key, 25.0) if t2m_monthly else 25.0
+        m_temp = temp_monthly.get(m_key, 25.0) if temp_monthly else 25.0
         if m_ghi is None:
             m_ghi = annual_ghi / 12
         if m_temp is None:
@@ -218,7 +350,7 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
         ghi_frac = m_ghi / total_ghi if total_ghi > 0 else 1 / 12
         m_gen = gen_y1_kwh * ghi_frac
         m_poa = annual_poa * ghi_frac
-        m_pr = (m_gen / (m_poa * module_capacity_kw * 1000)) if (m_poa > 0 and module_capacity_kw > 0) else 0
+        m_pr = (m_gen / (m_poa * module_capacity_kw)) if (m_poa > 0 and module_capacity_kw > 0) else 0
         m_sy = m_gen / module_capacity_kw if module_capacity_kw > 0 else 0
 
         monthly_data.append({
@@ -243,9 +375,9 @@ def compute_monthly_breakdown(weather_data, annual_ghi, annual_poa, loss_factors
     return monthly_data, annual_metrics
 
 
-def compute_pvsyst_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20,
+def compute_energy_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20,
                            mounting_type="Fixed Tilt", ghi_avg=5.5):
-    """Compute PVSyst-style energy loss breakdown.
+    """Compute energy loss breakdown.
     Returns list of (loss_name, loss_pct, cumulative_pct) tuples for waterfall chart,
     and a dict of individual loss factors.
     """
@@ -303,13 +435,13 @@ def compute_pvsyst_losses(temp_coeff_pmax, noct, avg_temp, cuf, albedo=0.20,
 def get_weather_summary(weather_data):
     """Format weather data summary for report display."""
     if not weather_data:
-        return "Weather data: Heuristic estimate (NASA POWER unavailable)"
-    ghi = weather_data.get("ALLSKY_SFC_SW_GHI", {})
-    if not ghi:
         return "Weather data: Heuristic estimate"
-    vals = [v for v in ghi.values() if v is not None]
+    ghi_monthly, _, _, source = _extract_monthly_data(weather_data)
+    if not ghi_monthly:
+        return "Weather data: Heuristic estimate"
+    vals = [v for v in ghi_monthly.values() if v is not None]
     if not vals:
         return "Weather data: Heuristic estimate"
     annual = sum(vals)
     monthly_avg = annual / 12
-    return f"NASA POWER: GHI {annual:.0f} kWh/m²/yr ({monthly_avg:.1f} kWh/m²/month avg)"
+    return f"{source}: GHI {annual:.0f} kWh/m²/yr ({monthly_avg:.1f} kWh/m²/month avg)"
