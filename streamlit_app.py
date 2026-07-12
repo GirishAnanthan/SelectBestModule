@@ -363,9 +363,9 @@ elif step == 1:
             else:
                 pdf_bytes = None
 
+            existing = prev_specs[i] if i < len(prev_specs) else None
+
             if pdf_bytes is not None:
-                # Check if we already have parsed specs for this slot
-                existing = prev_specs[i] if i < len(prev_specs) else None
                 if existing and existing.get("_filename") == prev_filenames.get(i, "") and not uploaded:
                     # Use existing specs (user edited them before)
                     specs = existing
