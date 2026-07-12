@@ -319,7 +319,7 @@ if step == 0:
         latitude = st.number_input("Latitude (°)", -90.0, 90.0, 10.38, 0.01, format="%.2f", key="s_lat")
         longitude = st.number_input("Longitude (°)", -180.0, 180.0, 78.82, 0.01, format="%.2f", key="s_lon")
         tilt_angle = None
-        if mounting_type == "Fixed Tilt":
+        if mounting_type in ("Fixed Tilt", "Single Axis Tracker"):
             tilt_angle = st.number_input("Tilt angle (°)", 0, 60, 10, 1, key="s_tilt")
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -613,7 +613,7 @@ elif step == 5:
     latitude = st.session_state.get("s_lat", 10.38)
     longitude = st.session_state.get("s_lon", 78.82)
     tilt_angle = st.session_state.get("s_tilt", 10)
-    if mounting_type != "Fixed Tilt":
+    if mounting_type == "Dual Axis Tracker":
         tilt_angle = None
     n_modules = st.session_state.get("n_mod", 2)
     module_specs_list = st.session_state.get("module_specs_list", [])
