@@ -150,6 +150,7 @@ for k in ("step",):
         st.session_state[k] = 0
 for k,v in {"results":None,"chart_paths":None,"project_info":None,"mod_list":None,
             "weather_data":None,"project_params":None,"module_specs_list":None,
+            "module_pdf_bytes":{},"module_filenames":{},
             "report_generated":False}.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -327,6 +328,11 @@ elif step == 1:
     spec_ratio = [col_weight] * n_modules
     cols = st.columns(spec_ratio, gap="small")
 
+    # Restore previously stored data
+    prev_specs = st.session_state.get("module_specs_list", [])
+    prev_pdf_bytes = st.session_state.get("module_pdf_bytes", {})
+    prev_filenames = st.session_state.get("module_filenames", {})
+
     module_specs_list = []
     for i in range(n_modules):
         label = f"Module {i+1}"
@@ -338,46 +344,71 @@ elif step == 1:
             </div>""", unsafe_allow_html=True)
 
             uploaded = st.file_uploader(f"Datasheet (PDF)", type=["pdf"], key=f"upload_{i}", label_visibility="collapsed")
+
+            # If new file uploaded, store bytes and filename
             if uploaded is not None:
                 pdf_bytes = uploaded.read()
-                try:
-                    specs = cached_parse(pdf_bytes, default_tech)
-                except Exception as e:
-                    st.error(f"Parse failed: {e}")
-                    specs = None
-                if specs and specs.get("_error"):
-                    st.warning(f"Partial: {specs['_error']}")
+                prev_pdf_bytes[i] = pdf_bytes
+                prev_filenames[i] = uploaded.name
+                st.session_state.module_pdf_bytes = prev_pdf_bytes
+                st.session_state.module_filenames = prev_filenames
+            # Otherwise, restore from session state
+            elif i in prev_pdf_bytes:
+                pdf_bytes = prev_pdf_bytes[i]
+                uploaded_name = prev_filenames.get(i, "")
+            else:
+                pdf_bytes = None
 
-                if specs and specs.get("power_options"):
-                    opts = specs["power_options"]
-                    mid_idx = len(opts) // 2
-                    selected_wp = st.selectbox("Wp", options=opts, index=min(mid_idx+1, len(opts)-1), key=f"wp_{i}", label_visibility="collapsed")
-                    specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
-                    specs["power_wp"] = int(selected_wp)
-                elif specs:
-                    selected_wp = st.number_input("Wp", 300, 800, 600, 5, key=f"wp_m_{i}", label_visibility="collapsed")
-                    specs["power_wp"] = int(selected_wp)
-                    specs["power_options"] = [int(selected_wp)]
+            if pdf_bytes is not None:
+                # Check if we already have parsed specs for this slot
+                existing = prev_specs[i] if i < len(prev_specs) else None
+                if existing and existing.get("_filename") == prev_filenames.get(i, "") and not uploaded:
+                    # Use existing specs (user edited them before)
+                    specs = existing
+                else:
+                    # Parse fresh
+                    try:
+                        specs = cached_parse(pdf_bytes, default_tech)
+                    except Exception as e:
+                        st.error(f"Parse failed: {e}")
+                        specs = None
+                    if specs and specs.get("_error"):
+                        st.warning(f"Partial: {specs['_error']}")
+
+                    if specs and specs.get("power_options"):
+                        opts = specs["power_options"]
+                        mid_idx = len(opts) // 2
+                        # Restore previously selected Wp if available
+                        prev_wp = existing.get("power_wp") if existing else None
+                        wp_index = opts.index(prev_wp) if prev_wp in opts else min(mid_idx+1, len(opts)-1)
+                        selected_wp = st.selectbox("Wp", options=opts, index=wp_index, key=f"wp_{i}", label_visibility="collapsed")
+                        specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+                        specs["power_wp"] = int(selected_wp)
+                    elif specs:
+                        prev_wp_val = int(existing.get("power_wp", 600)) if existing else 600
+                        selected_wp = st.number_input("Wp", 300, 800, prev_wp_val, 5, key=f"wp_m_{i}", label_visibility="collapsed")
+                        specs["power_wp"] = int(selected_wp)
+                        specs["power_options"] = [int(selected_wp)]
 
                 if specs:
-                    default_price = 20 if "redren" in (uploaded.name or "").lower() else 22
-                    specs["price_per_wp"] = st.number_input(f"Price/Wp", 5.0, 50.0, float(default_price), 0.5, key=f"price_{i}", label_visibility="collapsed")
-                    specs["_filename"] = uploaded.name
+                    prev_price = float(existing.get("price_per_wp", 22)) if existing else 22
+                    specs["price_per_wp"] = st.number_input(f"Price/Wp", 5.0, 50.0, prev_price, 0.5, key=f"price_{i}", label_visibility="collapsed")
+                    specs["_filename"] = prev_filenames.get(i, "")
 
                     # Extracted specs toggle
                     with st.popover("Extracted specs", use_container_width=True):
                         st.text(format_specs_for_display(specs))
 
-                    # Editable fields — compact single column
-                    vmp = st.number_input("Vmp (V)", 0.0, 100.0, float(specs.get("vmp",0) or 0), key=f"vmp_{i}")
-                    imp = st.number_input("Imp (A)", 0.0, 30.0, float(specs.get("imp",0) or 0), key=f"imp_{i}")
-                    voc = st.number_input("Voc (V)", 0.0, 100.0, float(specs.get("voc",0) or 0), key=f"voc_{i}")
-                    eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(specs.get("efficiency_pct",0) or 0), key=f"eff_{i}")
-                    tc = st.number_input("TC Pmax (%/°C)", 0.0, 1.0, float(abs(specs.get("temp_coeff_pmax",0) or 0)), key=f"tc_{i}")
-                    deg_y1 = st.number_input("Y1 Degr. (%)", 0.0, 5.0, float(specs.get("deg_y1_pct",0) or 0), key=f"deg_y1_{i}")
-                    deg_ann = st.number_input("Ann. Degr. (%)", 0.0, 1.0, float(specs.get("deg_annual_pct",0) or 0), key=f"deg_ann_{i}")
-                    noct = st.number_input("NOCT (°C)", 0, 60, int(specs.get("noct",0) or 0), key=f"noct_{i}")
-                    pw = st.number_input("Warranty (yr)", 0, 40, int(specs.get("warranty_power",0) or 0), key=f"pw_{i}")
+                    # Editable fields — restore from existing if available
+                    vmp = st.number_input("Vmp (V)", 0.0, 100.0, float(existing.get("vmp", specs.get("vmp",0) or 0) if existing else specs.get("vmp",0) or 0), key=f"vmp_{i}")
+                    imp = st.number_input("Imp (A)", 0.0, 30.0, float(existing.get("imp", specs.get("imp",0) or 0) if existing else specs.get("imp",0) or 0), key=f"imp_{i}")
+                    voc = st.number_input("Voc (V)", 0.0, 100.0, float(existing.get("voc", specs.get("voc",0) or 0) if existing else specs.get("voc",0) or 0), key=f"voc_{i}")
+                    eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(existing.get("efficiency_pct", specs.get("efficiency_pct",0) or 0) if existing else specs.get("efficiency_pct",0) or 0), key=f"eff_{i}")
+                    tc = st.number_input("TC Pmax (%/°C)", 0.0, 1.0, float(abs(existing.get("temp_coeff_pmax", specs.get("temp_coeff_pmax",0) or 0) if existing else specs.get("temp_coeff_pmax",0) or 0)), key=f"tc_{i}")
+                    deg_y1 = st.number_input("Y1 Degr. (%)", 0.0, 5.0, float(existing.get("deg_y1_pct", specs.get("deg_y1_pct",0) or 0) if existing else specs.get("deg_y1_pct",0) or 0), key=f"deg_y1_{i}")
+                    deg_ann = st.number_input("Ann. Degr. (%)", 0.0, 1.0, float(existing.get("deg_annual_pct", specs.get("deg_annual_pct",0) or 0) if existing else specs.get("deg_annual_pct",0) or 0), key=f"deg_ann_{i}")
+                    noct = st.number_input("NOCT (°C)", 0, 60, int(existing.get("noct", specs.get("noct",0) or 0) if existing else specs.get("noct",0) or 0), key=f"noct_{i}")
+                    pw = st.number_input("Warranty (yr)", 0, 40, int(existing.get("warranty_power", specs.get("warranty_power",0) or 0) if existing else specs.get("warranty_power",0) or 0), key=f"pw_{i}")
 
                     specs.update(vmp=vmp, imp=imp, voc=voc, efficiency_pct=eff, temp_coeff_pmax=-tc, deg_y1_pct=deg_y1, deg_annual_pct=deg_ann, noct=noct, warranty_power=pw)
                     st.caption(f"Extracted via {specs.get('_extraction_method','N/A')}")
