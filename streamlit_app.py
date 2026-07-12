@@ -334,9 +334,9 @@ elif step == 1:
     cols = st.columns(spec_ratio, gap="small")
 
     # Restore previously stored data
-    prev_specs = st.session_state.get("module_specs_list", [])
-    prev_pdf_bytes = st.session_state.get("module_pdf_bytes", {})
-    prev_filenames = st.session_state.get("module_filenames", {})
+    prev_specs = st.session_state.get("module_specs_list") or []
+    prev_pdf_bytes = st.session_state.get("module_pdf_bytes") or {}
+    prev_filenames = st.session_state.get("module_filenames") or {}
 
     module_specs_list = []
     for i in range(n_modules):
