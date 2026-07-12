@@ -927,6 +927,7 @@ def generate_report(results, project_info, chart_dir, output_path):
         completed_count = 0
         in_progress_count = 0
         not_started_count = 0
+        not_applicable_count = 0
 
         for idx, (approval, authority, default_days) in enumerate(STATUTORY_APPROVALS):
             comp = compliances.get(idx, {})
@@ -939,6 +940,9 @@ def generate_report(results, project_info, chart_dir, output_path):
             elif status == "Under Progress":
                 in_progress_count += 1
                 status_display = "In Progress"
+            elif status == "Not Applicable":
+                not_applicable_count += 1
+                status_display = "N/A"
             else:
                 not_started_count += 1
                 status_display = "Not Started"
@@ -952,7 +956,8 @@ def generate_report(results, project_info, chart_dir, output_path):
         pdf.ptext(
             f"Summary: {completed_count}/{total} Completed, "
             f"{in_progress_count}/{total} In Progress, "
-            f"{not_started_count}/{total} Not Started."
+            f"{not_started_count}/{total} Not Started, "
+            f"{not_applicable_count}/{total} Not Applicable."
         )
         pdf.ln(2)
 

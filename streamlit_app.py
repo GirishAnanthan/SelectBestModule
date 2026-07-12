@@ -623,8 +623,8 @@ elif step == 4:
         with c4:
             actual = st.number_input("Days", 0, 365, int(item['actual_days']), 5, key=f"comp_days_{idx}", label_visibility="collapsed")
         with c5:
-            status = st.selectbox("Status", ["Not Started", "Under Progress", "Completed"],
-                                  index=["Not Started", "Under Progress", "Completed"].index(item['status']),
+            status = st.selectbox("Status", ["Not Started", "Under Progress", "Completed", "Not Applicable"],
+                                  index=["Not Started", "Under Progress", "Completed", "Not Applicable"].index(item['status']),
                                   key=f"comp_status_{idx}", label_visibility="collapsed")
         new_compliances[idx] = {"actual_days": actual, "status": status}
 
@@ -634,12 +634,14 @@ elif step == 4:
     total = len(comp_data)
     completed = sum(1 for v in new_compliances.values() if v["status"] == "Completed")
     in_progress = sum(1 for v in new_compliances.values() if v["status"] == "Under Progress")
-    pending = total - completed - in_progress
+    not_applicable = sum(1 for v in new_compliances.values() if v["status"] == "Not Applicable")
+    pending = total - completed - in_progress - not_applicable
 
     st.markdown(f"""<div style="display:flex;gap:1rem;padding:0.8rem 0;font-size:0.75rem">
         <span style="color:{t['success']}">&#9679; Completed: {completed}/{total}</span>
         <span style="color:{t['accent']}">&#9679; In Progress: {in_progress}/{total}</span>
         <span style="color:{t['dim']}">&#9679; Not Started: {pending}/{total}</span>
+        <span style="color:{t['muted']}">&#9679; Not Applicable: {not_applicable}/{total}</span>
     </div>""", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
