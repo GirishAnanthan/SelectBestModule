@@ -724,6 +724,7 @@ elif step == 5:
             chart_paths = st.session_state.chart_paths
             scored = (st.session_state.project_info or {}).get("scored", [])
             mod_names = list(results.keys())
+            weather_data = st.session_state.get("weather_data")
         else:
             st.markdown("</div>", unsafe_allow_html=True)
             st.stop()
@@ -735,6 +736,7 @@ elif step == 5:
         chart_paths = st.session_state.chart_paths
         scored = (st.session_state.project_info or {}).get("scored", [])
         mod_names = list(results.keys())
+        weather_data = st.session_state.get("weather_data")
         if st.button("← Back to Editing", key="back_edit_btn", type="secondary", on_click=_go_back, use_container_width=False):
             pass
         _show_cached = True
