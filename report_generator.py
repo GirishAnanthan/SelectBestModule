@@ -399,40 +399,31 @@ def generate_report(results, project_info, chart_dir, output_path):
         f"Equity {money(best_r['equity'])}")
     pdf.set_y(y0 + h0 + 3)
 
-    pdf.ln(3)
-    pdf.set_font("Helvetica", "I", 7.5)
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.set_text_color(0, 51, 102)
+    pdf.cell(0, 4.5, "Report Objective & Key Assumptions", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 7.2)
+    pdf.set_text_color(45, 45, 45)
+    pdf.multi_cell(0, 3.6,
+        f"Objective: compare shortlisted modules for a {info.get('plant_capacity', 'N/A')} MW DC project at "
+        f"{info.get('location', 'the selected site')} and identify the preferred module using generation, degradation, "
+        "warranty, price, LCOE, equity IRR, NPV, payback, and user-weighted scoring.")
+    pdf.multi_cell(0, 3.6,
+        f"Assumptions: weather basis {info.get('weather_source', 'Selected source')} ({info.get('weather_summary', 'N/A')}); "
+        f"mounting {info.get('mounting_type', 'Fixed Tilt')}{' at ' + str(info.get('tilt_angle')) + ' degrees' if info.get('tilt_angle') else ''}; "
+        f"debt/equity {debt_ratio*100:.0f}/{equity_ratio*100:.0f}; interest {interest_rate*100:.1f}% p.a.; "
+        f"loan {loan_tenure} years; PPA {sym} {float(info.get('ppa_tariff', 0) or 0):.2f}/kWh; "
+        f"discount rate {discount_rate*100:.1f}% p.a.; tax {tax_rate*100:.2f}%.")
+    pdf.multi_cell(0, 3.6,
+        "Calculation basis: Year-1 generation is net of first-year degradation. LCOE is a simple unlevered pre-tax "
+        "discounted cost of energy including CAPEX, O&M, and insurance; financing costs, tax shields, salvage, and "
+        "decommissioning are excluded.")
+    pdf.ln(1)
+    pdf.set_font("Helvetica", "I", 7.2)
     pdf.set_text_color(130, 130, 130)
-    pdf.multi_cell(0, 3.8,
-        "Disclaimer: Based on manufacturer datasheets and standard financial modelling. "
-        "Actual returns may vary based on site conditions, financing terms, and tariff rates.")
-
-    # =========================================================
-    # REPORT SUMMARY PAGE
-    # =========================================================
-    pdf.add_page()
-    pdf.stitle("Report Objective & Key Assumptions")
-    pdf.sub_title("Objective")
-    pdf.ptext(
-        f"This report compares shortlisted solar PV modules for a {info.get('plant_capacity', 'N/A')} MW DC "
-        f"ground-mount solar project at {info.get('location', 'the selected site')}. The objective is to identify "
-        "the technically and financially preferable module based on generation, degradation, warranty, price, "
-        "LCOE, equity IRR, NPV, payback, and user-defined scoring priorities."
-    )
-    pdf.sub_title("Important Assumptions")
-    pdf.bul(f"Weather basis: {info.get('weather_source', 'Selected source')} - {info.get('weather_summary', 'N/A')}. If the selected online source is unavailable, latitude-based fallback estimates are used and disclosed.")
-    pdf.bul(f"Mounting configuration: {info.get('mounting_type', 'Fixed Tilt')}{' with tilt ' + str(info.get('tilt_angle')) + ' degrees' if info.get('tilt_angle') else ''}.")
-    pdf.bul(f"Financial structure: Debt {debt_ratio*100:.0f}% / Equity {equity_ratio*100:.0f}%, interest {interest_rate*100:.1f}% p.a., loan tenure {loan_tenure} years.")
-    pdf.bul(f"Revenue assumptions: PPA tariff {sym} {float(info.get('ppa_tariff', 0) or 0):.2f}/kWh with tariff escalation {tariff_esc*100:.1f}% p.a.")
-    pdf.bul(f"Discounting: NPV is based on equity cash flows discounted at {discount_rate*100:.1f}% p.a.; IRR is equity IRR over the operating period.")
-    pdf.bul(f"Tax and operating cost basis: tax rate {tax_rate*100:.2f}%, O&M escalation 3.0% p.a., insurance 0.3% of project cost p.a.")
-    pdf.sub_title("Calculation Basis")
-    pdf.ptext(
-        "Generation uses selected weather-source monthly GHI where available, derives POA using the chosen mounting "
-        "configuration, applies module temperature/degradation assumptions, and reports Year-1 net generation after "
-        "first-year degradation. LCOE is a simple unlevered pre-tax discounted cost of energy including CAPEX, O&M, "
-        "and insurance, excluding financing costs, tax shields, salvage, and decommissioning. Scoring is a decision-support "
-        "heuristic based on user-selected weights and should be read with the detailed tables that follow."
-    )
+    pdf.multi_cell(0, 3.5,
+        "Disclaimer: Based on manufacturer datasheets and standard financial modelling. Actual returns may vary based on site conditions, financing terms, and tariff rates.")
 
     # =========================================================
     # 1. EXECUTIVE SUMMARY
