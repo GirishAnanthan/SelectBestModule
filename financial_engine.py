@@ -285,6 +285,25 @@ def run_analysis(module_list, project_params, chart_dir, weather_data=None, skip
         currency = project_params.get("currency")
         chart_paths = generate_charts(results, module_list, project_params, chart_dir, currency=currency)
 
+    # Calculate generation for all three mounting types for comparison
+    lat = project_params.get("latitude", 10.38)
+    lon = project_params.get("longitude", 78.82)
+    tilt_angle = project_params.get("tilt_angle")
+    for short_name, r in results.items():
+        gen_by_mount = {}
+        sy_by_mount = {}
+        for mt in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
+            sm = compute_annual_solar_metrics(lat, lon, weather_data, mounting_type=mt, tilt_angle=tilt_angle)
+            # Calculate generation using the same module specs but different POA
+            actual_kw = r["capacity_mw"] * 1000
+            cuf_mt = sm["cuf"]
+            gen_mt = actual_kw * HRS_PER_YR * cuf_mt
+            sy_mt = sm["specific_yield"]
+            gen_by_mount[mt] = float(gen_mt)
+            sy_by_mount[mt] = float(sy_mt)
+        r["gen_by_mounting"] = gen_by_mount
+        r["specific_yield_by_mounting"] = sy_by_mount
+
     return results, chart_paths
 
 

@@ -488,6 +488,24 @@ def generate_report(results, project_info, chart_dir, output_path):
     pd_rows.append(row_cnt)
     pd_rows.append(row_land)
 
+    # Annual Generation by mounting type
+    for mt_label in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
+        row_gen = [f"Annual Gen ({mt_label})"] + [""] * n_mods
+        for i, name in enumerate(mod_names):
+            r = results[name]
+            gen_val = r.get("gen_by_mounting", {}).get(mt_label, 0)
+            row_gen[i + 1] = f"{gen_val/1e3:,.0f} MWh" if gen_val else "N/A"
+        pd_rows.append(row_gen)
+
+    # Specific Yield by mounting type
+    for mt_label in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
+        row_sy = [f"Specific Yield ({mt_label})"] + [""] * n_mods
+        for i, name in enumerate(mod_names):
+            r = results[name]
+            sy_val = r.get("specific_yield_by_mounting", {}).get(mt_label, 0)
+            row_sy[i + 1] = f"{sy_val:,.0f} kWh/kWp" if sy_val else "N/A"
+        pd_rows.append(row_sy)
+
     pd_rows.append(["Mounting Structure"] + [mt] * n_mods)
 
     bifacial_detected = info.get("bifacial_detected", False)
@@ -561,6 +579,19 @@ def generate_report(results, project_info, chart_dir, output_path):
         pv_rows.append(["CUF (Capacity Util.)"] +
                        [f"{results[n]['cuf']*100:.1f}%" for n in mod_names] +
                        [""])
+
+        # Annual Generation by mounting type
+        for mt_label in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
+            pv_rows.append([f"Annual Gen ({mt_label})"] +
+                           [f"{results[n].get('gen_by_mounting', {}).get(mt_label, 0)/1e3:,.0f}" for n in mod_names] +
+                           ["MWh"])
+
+        # Specific Yield by mounting type
+        for mt_label in ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"]:
+            pv_rows.append([f"Specific Yield ({mt_label})"] +
+                           [f"{results[n].get('specific_yield_by_mounting', {}).get(mt_label, 0):,.0f}" for n in mod_names] +
+                           ["kWh/kWp"])
+
         pdf.tbl_block(pv_col, pv_headers, pv_rows)
         pdf.ln(1)
 
