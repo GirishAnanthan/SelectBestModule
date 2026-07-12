@@ -38,6 +38,8 @@ def _nasa_monthly_average(raw_dict, as_monthly_total=True):
             continue
         year = int(str(key)[:4])
         month = int(str(key)[4:6])
+        if month < 1 or month > 12:
+            continue
         value = val * _days_in_month(year, month) if as_monthly_total else val
         buckets[f"{month:02d}"].append(value)
     return {
@@ -62,9 +64,9 @@ def fetch_nasa_power_monthly(lat, lon, start_year=2020, end_year=2024):
         return None
 
     params = [
-        "ALLSKY_SFC_SW_GHI",
+        "ALLSKY_SFC_SW_DWN",
         "ALLSKY_SFC_SW_DNI",
-        "ALLSKY_SFC_SW_DIF",
+        "ALLSKY_SFC_SW_DIFF",
         "T2M",
         "WS2M",
     ]
@@ -174,8 +176,8 @@ def _extract_monthly_data(weather_data):
     if not weather_data:
         return None, None, None, None
 
-    if "ALLSKY_SFC_SW_GHI" in weather_data:
-        ghi = weather_data["ALLSKY_SFC_SW_GHI"]
+    if "ALLSKY_SFC_SW_DWN" in weather_data or "ALLSKY_SFC_SW_GHI" in weather_data:
+        ghi = weather_data.get("ALLSKY_SFC_SW_DWN", weather_data.get("ALLSKY_SFC_SW_GHI", {}))
         dni = weather_data.get("ALLSKY_SFC_SW_DNI", {})
         temp = weather_data.get("T2M", {})
         source = "NASA POWER"

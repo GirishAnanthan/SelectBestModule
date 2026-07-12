@@ -4,7 +4,6 @@ Upload 2-5 datasheets, enter financials, generate comparison PDF report.
 """
 import streamlit as st
 import os, io, json, tempfile, sys, re, hashlib, time, uuid, traceback
-import urllib.request
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -76,16 +75,6 @@ currency_options = _currency.currency_options
 code_from_option = _currency.code_from_option
 get_currency = _currency.get_currency
 make_formatter = _currency.make_formatter
-
-
-def _check_internet():
-    """Quick connectivity check against a known endpoint."""
-    try:
-        urllib.request.urlopen("https://httpbin.org/get", timeout=5)
-        return True
-    except Exception:
-        return False
-
 
 st.set_page_config(page_title="SolarPro | PV Module Financial Intelligence", page_icon="☀️", layout="wide")
 
@@ -889,49 +878,42 @@ elif step == 5:
 
     if not _show_cached:
         # ---- RUN FRESH ANALYSIS ----
-        # Check internet connectivity before weather API calls
-        _offline_mode = False
+        # Test the selected weather API directly. Generic connectivity checks can
+        # fail on Streamlit Cloud even when NASA/PVGIS are reachable.
         weather_source_label = weather_source
-        if ws in ("api", "pvgis") and not _check_internet():
-            st.error("🔌 No Internet Connection")
-            st.markdown("""
-            **Unable to connect to weather data source.**
-            
-            The selected weather source (**NASA POWER API** or **PVGIS TMY API**) requires an active internet connection.
-            
-            **Please check:**
-            - Your Wi-Fi or Ethernet connection is active
-            - No firewall is blocking external API requests
-            - The network has internet access
-            
-            ---
-            *Click below to continue with estimated weather data based on your site's latitude.*
+        project_params_for_run = project_params
+        weather_data = None
+        if ws == "api":
+            with st.spinner("Fetching NASA POWER weather data..."):
+                weather_data = cached_nasa(latitude, longitude)
+        elif ws == "pvgis":
+            with st.spinner("Fetching PVGIS weather data..."):
+                weather_data = cached_pvgis(latitude, longitude)
+
+        if ws in ("api", "pvgis") and weather_data is None:
+            st.error("Weather data source unavailable")
+            st.markdown(f"""
+            **The selected weather source did not return usable data.**
+
+            Source selected: **{weather_source}**
+
+            This can happen if the weather API is temporarily unavailable, blocked by the Streamlit Cloud network,
+            rate-limited, or unable to serve the selected coordinates.
+
+            You can retry after some time, choose **Simplified Estimate**, or continue now with latitude-based estimated weather values.
             """)
-            if st.button("✅ Continue Without Internet", key="offline_btn", type="primary"):
-                _offline_mode = True
+            if st.button("✅ Continue With Estimated Weather Data", key="weather_fallback_btn", type="primary"):
+                project_params_for_run = dict(project_params)
+                project_params_for_run["weather_source"] = "estimate"
+                weather_source_label = "Estimated Fallback"
             else:
                 st.stop()
+        project_params = project_params_for_run
         
         try:
             with st.spinner("Running comprehensive analysis..."):
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    if _offline_mode:
-                        weather_data = None
-                        project_params = dict(project_params)
-                        project_params["weather_source"] = "estimate"
-                        weather_source_label = "Estimated Fallback"
-                    elif ws == "api":
-                        weather_data = cached_nasa(latitude, longitude)
-                    elif ws == "pvgis":
-                        weather_data = cached_pvgis(latitude, longitude)
-                    else:
-                        weather_data = None
-                    if ws in ("api", "pvgis") and weather_data is None:
-                        st.warning("Selected weather data source did not return usable data. Continuing with latitude-based estimated weather values for this run.")
-                        project_params = dict(project_params)
-                        project_params["weather_source"] = "estimate"
-                        weather_source_label = "Estimated Fallback"
-                    results, chart_paths = run_analysis(mod_list, project_params, tmpdir, weather_data=weather_data)
+                    results, chart_paths = run_analysis(mod_list, project_params_for_run, tmpdir, weather_data=weather_data)
 
                     _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
                               "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
@@ -966,12 +948,12 @@ elif step == 5:
                     "ppa_tariff": ppa_tariff, "tariff_esc": tariff_esc,
                     "debt_ratio": debt_ratio, "interest_rate": interest_rate,
                     "loan_tenure": loan_tenure, "discount_rate": discount_rate,
-                    "bos_cost": bos_cost, "tax_rate": project_params.get("tax_rate", 0.2517),
+                    "bos_cost": bos_cost, "tax_rate": project_params_for_run.get("tax_rate", 0.2517),
                     "bifacial_detected": any(s.get("bifacial",False) for s in module_specs_list if s),
                 }
                 st.session_state.mod_list = mod_list
                 st.session_state.weather_data = weather_data
-                st.session_state.project_params = project_params
+                st.session_state.project_params = project_params_for_run
 
                 st.session_state.chart_paths = chart_paths
         except Exception as _analysis_err:
