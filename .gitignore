@@ -12,8 +12,8 @@ fin_results.json
 Comparison_Report_*.pdf
 
 # Sample datasheets (copyrighted by manufacturers)
-Redren*.pdf
-Waaree*.pdf
+*.pdf
+!SolarPro_Report_*.pdf
 
 # IDE
 .vscode/
