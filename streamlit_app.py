@@ -84,7 +84,6 @@ html, body, .stApp {{ background: {t['bg']}; color: {t['text']}; font-family: 'M
 .stApp > header {{ display: none; }}
 section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
 .block-container {{ padding: 0 !important; max-width: 1200px !important; }}
-button[key^="nav_back_"] {{ display: none !important; }}
 .solarpro-header {{ display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.5rem; border-bottom: 1px solid {t['border']}; background: {t['bg']}; }}
 .solarpro-brand {{ font-family: 'Playfair Display', serif; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; color: {t['text']}; }}
 .solarpro-brand .sun-mark {{ color: {t['accent']}; font-size: 1rem; }}
@@ -92,12 +91,9 @@ button[key^="nav_back_"] {{ display: none !important; }}
 .solarpro-tag {{ font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['muted']}; letter-spacing: 0.08em; display: flex; align-items: center; gap: 0.4rem; }}
 .dot {{ width: 6px; height: 6px; border-radius: 50%; background: {t['success']}; display: inline-block; animation: pulse 2s infinite; }}
 @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:0.3}} }}
-.step-bar {{ display: flex; align-items: center; gap: 0; padding: 0.6rem 1.5rem 0; background: {t['bg']}; border-bottom: 1px solid {t['border']}; }}
-.step-item {{ font-family: 'DM Mono', monospace; font-size: 0.65rem; padding: 0.5rem 1rem; cursor: pointer; color: {t['dim']}; letter-spacing: 0.04em; border-bottom: 2px solid transparent; transition: all .2s; user-select: none; }}
-.step-item:hover {{ color: {t['muted']}; }}
-.step-item.active {{ color: {t['accent']}; border-bottom-color: {t['accent']}; }}
-.step-item .num {{ color: {t['dim']}; margin-right: 0.3rem; }}
-.step-item.active .num {{ color: {t['accent']}; }}
+.step-nav {{ display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.5rem; background: {t['bg']}; border-bottom: 1px solid {t['border']}; }}
+.step-nav .step-label {{ font-family: 'DM Mono', monospace; font-size: 0.7rem; color: {t['accent']}; letter-spacing: 0.08em; }}
+.step-nav .step-desc {{ font-size: 0.65rem; color: {t['muted']}; margin-left: 0.8rem; }}
 .progress-wrap {{ padding: 0.5rem 1.5rem; }}
 .progress-label {{ display: flex; justify-content: space-between; font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['muted']}; }}
 .progress-label .stat {{ color: {t['text']}; }}
@@ -129,8 +125,7 @@ div[data-testid="metric-container"] > div:nth-child(2) {{ font-size: 1.2rem !imp
 .stTable table {{ background: {t['card']} !important; }}
 .stTable th {{ background: {t['dim']}40 !important; color: {t['text']} !important; font-size: 0.65rem !important; }}
 .stTable td {{ color: {t['muted']} !important; font-size: 0.7rem !important; }}
-.wiz-actions {{ display: flex; justify-content: space-between; padding: 1rem 1.5rem; margin-top: 0.5rem; border-top: 1px solid {t['border']}; }}
-.wiz-actions .info {{ font-size: 0.65rem; color: {t['dim']}; font-family: 'DM Mono', monospace; }}
+.wiz-actions {{ display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; border-top: 1px solid {t['border']}; background: {t['bg']}; }}
 .stAlert {{ border-radius: 6px !important; font-size: 0.75rem !important; }}
 .st-cb {{ color: {t['muted']} !important; }}
 .st-b8 {{ color: {t['muted']} !important; }}
@@ -253,33 +248,15 @@ with st.sidebar:
         st.session_state.theme = selected_theme
         st.rerun()
 
-# step bar
-nav_html = '<div class="step-bar">'
-for i,n in enumerate(STEP_NAMES):
-    cls = "active" if i==st.session_state.step else ""
-    nav_html += f'<div class="step-item {cls}" data-idx="{i}"><span class="num">{i+1:02d}</span>{n}</div>'
-nav_html += '</div>'
-st.markdown(nav_html, unsafe_allow_html=True)
-
-# progress
+# step nav — simple label
 step = st.session_state.step
 st.markdown(f"""
-<div class="progress-wrap">
-    <div class="progress-label"><span>{STEP_EYEBROWS[step]}</span><span class="stat">{STEP_DESCS[step]}</span></div>
-    <div class="progress-track"><div class="progress-fill" style="width:{PCT(step)}%"></div></div>
+<div class="step-nav">
+    <div>
+        <span class="step-label">{STEP_EYEBROWS[step]}</span>
+        <span class="step-desc">{STEP_DESCS[step]}</span>
+    </div>
 </div>
-""", unsafe_allow_html=True)
-
-# click handler for step nav — always enabled
-st.markdown("""
-<script>
-const items = parent.document.querySelectorAll('.step-item');
-items.forEach(el => el.addEventListener('click', function(){
-    const idx = this.dataset.idx;
-    const btns = parent.document.querySelectorAll('button[kind="secondary"]');
-    if(btns[idx]) btns[idx].click();
-}));
-</script>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
@@ -475,15 +452,8 @@ elif step == 3:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ======================================================================
-# WIZARD ACTIONS (shared across all steps)
+# WIZARD NAVIGATION — Previous | Next | Continue (one row)
 # ======================================================================
-# Hidden back buttons for step bar navigation (one per step, triggered by JS)
-for _si in range(5):
-    if _si != step:
-        st.button(f"← Step {_si}", key=f"nav_back_{_si}", type="secondary",
-                  on_click=lambda s=_si: [setattr(st.session_state, "step", s),
-                                          setattr(st.session_state, "inputs_dirty", True) if s < 4 else None])
-
 def _go_back():
     st.session_state.step = st.session_state.step - 1
     st.session_state.inputs_dirty = True
@@ -492,17 +462,13 @@ def _go_forward():
     st.session_state.step = st.session_state.step + 1
     st.session_state.inputs_dirty = True
 
-st.markdown('<div class="wiz-actions">', unsafe_allow_html=True)
-bcol1, bcol2 = st.columns([1, 1])
-with bcol1:
+nav_c1, nav_mid, nav_c2 = st.columns([1, 2, 1])
+with nav_c1:
     if step > 0:
-        st.button("← Back", key="back_btn", type="secondary", on_click=_go_back)
-with bcol2:
+        st.button("← Previous", key="prev_btn", type="secondary", on_click=_go_back, use_container_width=True)
+with nav_c2:
     if step < 4:
-        st.button("Continue →", key="next_btn", on_click=_go_forward)
-    elif step == 4 and st.session_state.results is not None:
-        st.button("← Back to Editing", key="back_edit_btn", type="secondary", on_click=_go_back)
-st.markdown('</div>', unsafe_allow_html=True)
+        st.button("Next →", key="next_btn", on_click=_go_forward, use_container_width=True)
 
 # ======================================================================
 # STEP 4 — REPORT (Run analysis & show results)
@@ -639,6 +605,8 @@ if step == 4:
         chart_paths = st.session_state.chart_paths
         scored = st.session_state.project_info.get("scored", [])
         mod_names = list(results.keys())
+        if st.button("← Back to Editing", key="back_edit_btn", type="secondary", on_click=_go_back, use_container_width=False):
+            pass
     elif st.session_state.inputs_dirty:
         # Should not reach here, but safety stop
         st.markdown("</div>", unsafe_allow_html=True)
