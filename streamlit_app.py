@@ -532,12 +532,12 @@ if step == 0:
 
     col1, col2 = st.columns(2)
     with col1:
-        customer_name = st.text_input("Customer / Organisation", "Raghavan", key="s_customer")
-        project_name = st.text_input("Project name", "19.6 MW Solar Plant - Pudukottai", key="s_project")
-        location = st.text_input("Site location", "Pudukottai, Tamilnadu, India", key="s_location")
+        customer_name = st.text_input("Customer / Organisation", "", key="s_customer")
+        project_name = st.text_input("Project name", "", key="s_project")
+        location = st.text_input("Site location", "", key="s_location")
         mounting_type = st.radio("Mounting structure", ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"], index=0, key="s_mounting")
     with col2:
-        customer_company = st.text_input("Company", "Raghavan Group", key="s_company")
+        customer_company = st.text_input("Company", "", key="s_company")
         plant_capacity = st.number_input("DC plant capacity (MWp)", 0.1, 500.0, 19.6, 0.1, key="s_cap")
         latitude = st.number_input("Latitude (°)", -90.0, 90.0, 10.38, 0.01, format="%.2f", key="s_lat")
         longitude = st.number_input("Longitude (°)", -180.0, 180.0, 78.82, 0.01, format="%.2f", key="s_lon")
@@ -881,10 +881,10 @@ elif step == 5:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
 
     # read all inputs from session state fallbacks
-    customer_name = st.session_state.get("s_customer", "Raghavan")
-    customer_company = st.session_state.get("s_company", "Raghavan Group")
-    project_name = st.session_state.get("s_project", "19.6 MW Solar Plant - Pudukottai")
-    location = st.session_state.get("s_location", "Pudukottai, Tamilnadu, India")
+    customer_name = st.session_state.get("s_customer", "")
+    customer_company = st.session_state.get("s_company", "")
+    project_name = st.session_state.get("s_project", "")
+    location = st.session_state.get("s_location", "")
     mounting_type = st.session_state.get("s_mounting", "Fixed Tilt")
     plant_capacity = st.session_state.get("s_cap", 19.6)
     latitude = st.session_state.get("s_lat", 10.38)
