@@ -2,9 +2,63 @@
 PDF Report Generator - Professional compact layout for N-module comparison.
 """
 import os
+import re
+import tempfile
 from fpdf import FPDF
 from PIL import Image
 from currency import make_formatter
+from language import translate_text
+
+
+RTL_LANGS = {"ar", "fa", "iw", "ur", "ug", "ckb", "dv", "ps", "sd"}
+
+_FONT_BY_LANGUAGE = {
+    "ar": "NotoNaskhArabic", "fa": "NotoNaskhArabic", "ur": "NotoNaskhArabic",
+    "ps": "NotoNaskhArabic", "sd": "NotoNaskhArabic", "ug": "NotoNaskhArabic", "ckb": "NotoNaskhArabic",
+    "iw": "NotoSansHebrew", "yi": "NotoSansHebrew",
+    "hi": "NotoSansDevanagari", "mr": "NotoSansDevanagari", "ne": "NotoSansDevanagari",
+    "sa": "NotoSansDevanagari", "bho": "NotoSansDevanagari", "doi": "NotoSansDevanagari", "mai": "NotoSansDevanagari",
+    "bn": "NotoSansBengali", "as": "NotoSansBengali",
+    "ta": "NotoSansTamil", "te": "NotoSansTelugu", "kn": "NotoSansKannada", "ml": "NotoSansMalayalam",
+    "gu": "NotoSansGujarati", "pa": "NotoSansGurmukhi", "or": "NotoSansOriya", "si": "NotoSansSinhala",
+    "th": "NotoSansThai", "lo": "NotoSansLao", "km": "NotoSansKhmer", "my": "NotoSansMyanmar",
+    "am": "NotoSansEthiopic", "ti": "NotoSansEthiopic", "hy": "NotoSansArmenian", "ka": "NotoSansGeorgian",
+    "dv": "NotoSansThaana", "mni-Mtei": "NotoSansMeeteiMayek", "mn": "NotoSansMongolian",
+}
+
+_LOCAL_FONT_CANDIDATES = [
+    {
+        "family": "DejaVuSans",
+        "": [r"C:\Windows\Fonts\DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"],
+        "B": [r"C:\Windows\Fonts\DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"],
+        "I": [r"C:\Windows\Fonts\DejaVuSans-Oblique.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"],
+        "BI": [r"C:\Windows\Fonts\DejaVuSans-BoldOblique.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"],
+    },
+    {
+        "family": "NirmalaUI",
+        "": [r"C:\Windows\Fonts\Nirmala.ttf"],
+        "B": [r"C:\Windows\Fonts\NirmalaB.ttf"],
+    },
+    {
+        "family": "SegoeUI",
+        "": [r"C:\Windows\Fonts\segoeui.ttf"],
+        "B": [r"C:\Windows\Fonts\segoeuib.ttf"],
+        "I": [r"C:\Windows\Fonts\segoeuii.ttf"],
+        "BI": [r"C:\Windows\Fonts\segoeuiz.ttf"],
+    },
+    {
+        "family": "LiberationSans",
+        "": ["/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"],
+        "B": ["/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"],
+        "I": ["/usr/share/fonts/truetype/liberation2/LiberationSans-Italic.ttf"],
+        "BI": ["/usr/share/fonts/truetype/liberation2/LiberationSans-BoldItalic.ttf"],
+    },
+]
+
+_ACRONYMS = {
+    "IRR", "NPV", "LCOE", "CUF", "PR", "DCR", "CAPEX", "O&M", "DSCR", "PPA", "GHI", "POA",
+    "MW", "MWP", "MWH", "GWH", "KWH", "KWP", "WP", "NOCT", "TC", "N/A",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -12,9 +66,45 @@ from currency import make_formatter
 # ---------------------------------------------------------------------------
 
 class SolarReport(FPDF):
+    def __init__(self, *args, font_family="Helvetica", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.font_family = font_family
+        self.tr = lambda text: text
+
+    def t(self, text):
+        return self.tr(text) if isinstance(text, str) else text
+
+    def set_report_font(self, style="", size=0):
+        self.set_font(self.font_family, style, size)
+
+    def set_font(self, family=None, style="", size=0):
+        if family == "Helvetica" and getattr(self, "font_family", "Helvetica") != "Helvetica":
+            family = self.font_family
+        return super().set_font(family, style, size)
+
+    def cell(self, *args, **kwargs):
+        args = list(args)
+        if len(args) >= 3 and isinstance(args[2], str):
+            args[2] = self.t(args[2])
+        if isinstance(kwargs.get("text"), str):
+            kwargs["text"] = self.t(kwargs["text"])
+        if isinstance(kwargs.get("txt"), str):
+            kwargs["txt"] = self.t(kwargs["txt"])
+        return super().cell(*args, **kwargs)
+
+    def multi_cell(self, *args, **kwargs):
+        args = list(args)
+        if len(args) >= 3 and isinstance(args[2], str):
+            args[2] = self.t(args[2])
+        if isinstance(kwargs.get("text"), str):
+            kwargs["text"] = self.t(kwargs["text"])
+        if isinstance(kwargs.get("txt"), str):
+            kwargs["txt"] = self.t(kwargs["txt"])
+        return super().multi_cell(*args, **kwargs)
+
     def header(self):
         if self.page_no() > 1:
-            self.set_font("Helvetica", "I", 7.5)
+            self.set_report_font("I", 7.5)
             self.set_text_color(140, 140, 140)
             self.cell(0, 5, self.header_text, new_x="LMARGIN", new_y="NEXT", align="C")
             self.set_draw_color(210, 210, 210)
@@ -23,7 +113,7 @@ class SolarReport(FPDF):
 
     def footer(self):
         self.set_y(-12)
-        self.set_font("Helvetica", "I", 7.5)
+        self.set_report_font("I", 7.5)
         self.set_text_color(140, 140, 140)
         self.cell(0, 5, f"Page {self.page_no()}/{{nb}}", align="C")
 
@@ -37,7 +127,7 @@ class SolarReport(FPDF):
     def stitle(self, t):
         self.need(20)
         self.ln(1)
-        self.set_font("Helvetica", "B", 10.5)
+        self.set_report_font("B", 10.5)
         self.set_text_color(0, 51, 102)
         self.cell(0, 6, t, new_x="LMARGIN", new_y="NEXT")
         self.set_draw_color(0, 51, 102)
@@ -47,19 +137,19 @@ class SolarReport(FPDF):
     def sub_title(self, t):
         self.need(15)
         self.ln(0.5)
-        self.set_font("Helvetica", "B", 9.5)
+        self.set_report_font("B", 9.5)
         self.set_text_color(0, 51, 102)
         self.cell(0, 5.5, t, new_x="LMARGIN", new_y="NEXT")
         self.ln(0.5)
 
     def ptext(self, t, size=8.5):
         self.set_x(self.l_margin)
-        self.set_font("Helvetica", "", size)
+        self.set_report_font("", size)
         self.set_text_color(40, 40, 40)
         self.multi_cell(0, 6.0, t)
 
     def bul(self, t):
-        self.set_font("Helvetica", "", 8.5)
+        self.set_report_font("", 8.5)
         self.set_text_color(40, 40, 40)
         x0 = self.l_margin
         self.set_x(x0 + 2)
@@ -70,7 +160,7 @@ class SolarReport(FPDF):
 
     def note(self, t):
         self.set_x(self.l_margin)
-        self.set_font("Helvetica", "I", 7.5)
+        self.set_report_font("I", 7.5)
         self.set_text_color(110, 110, 110)
         self.multi_cell(0, 3.8, t)
 
@@ -81,24 +171,25 @@ class SolarReport(FPDF):
         self.set_fill_color(240, 245, 255)
         self.rect(x, y, w, h, style="DF")
         self.set_xy(x + 2, y + 1.5)
-        self.set_font("Helvetica", "B", 7.5)
+        self.set_report_font("B", 7.5)
         self.set_text_color(0, 51, 102)
         self.cell(w - 4, 3.5, label)
         self.set_xy(x + 2, y + 5.5)
-        self.set_font("Helvetica", "B", 11)
+        self.set_report_font("B", 11)
         self.set_text_color(0, 0, 0)
         self.cell(w - 4, 5.5, value)
         if sub:
             self.set_xy(x + 2, y + 12.5)
-            self.set_font("Helvetica", "I", 7)
+            self.set_report_font("I", 7)
             self.set_text_color(110, 110, 110)
             self.cell(w - 4, 3, sub)
 
     def _cell_lines(self, col_w, text):
         """Estimate number of lines needed to render text in given column width."""
+        text = self.t(str(text))
         if not text:
             return 1
-        tw = self.get_string_width(str(text))
+        tw = self.get_string_width(text)
         if tw <= col_w - 1:
             return 1
         return int(tw / (col_w - 1)) + (1 if tw % (col_w - 1) > 0.5 else 0)
@@ -114,7 +205,7 @@ class SolarReport(FPDF):
 
     def tbl_hdr(self, col_w, headers):
         self.set_x(self.l_margin)
-        self.set_font("Helvetica", "B", 8)
+        self.set_report_font("B", 8)
         self.set_text_color(255, 255, 255)
         rh = self._row_h(col_w, headers, 5.0)
         x0, y0 = self.get_x(), self.get_y()
@@ -133,7 +224,7 @@ class SolarReport(FPDF):
 
     def tbl_row(self, col_w, cells, bold=False, fill=False):
         self.set_x(self.l_margin)
-        self.set_font("Helvetica", "B" if bold else "", 7.5)
+        self.set_report_font("B" if bold else "", 7.5)
         self.set_text_color(0, 0, 0)
         rh = self._row_h(col_w, cells, 4.2)
         x0, y0 = self.get_x(), self.get_y()
@@ -217,6 +308,135 @@ def _fw(pdf, splits):
     return [total * x / s for x in splits]
 
 
+def _first_existing(paths):
+    for path in paths:
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
+def _font_url(family, style="Regular"):
+    return f"https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/{family}/{family}-{style}.ttf"
+
+
+def _download_font(family, style="Regular"):
+    try:
+        import requests
+        font_dir = os.path.join(tempfile.gettempdir(), "solarpro_fonts")
+        os.makedirs(font_dir, exist_ok=True)
+        path = os.path.join(font_dir, f"{family}-{style}.ttf")
+        if os.path.exists(path):
+            return path
+        response = requests.get(_font_url(family, style), timeout=8)
+        response.raise_for_status()
+        with open(path, "wb") as f:
+            f.write(response.content)
+        return path
+    except Exception:
+        return None
+
+
+def _register_report_font(pdf, lang_code):
+    if not lang_code or lang_code == "en":
+        return "Helvetica"
+
+    for font in _LOCAL_FONT_CANDIDATES:
+        regular = _first_existing(font.get("", []))
+        if not regular:
+            continue
+        family = font["family"]
+        pdf.add_font(family, "", regular)
+        for style in ("B", "I", "BI"):
+            style_path = _first_existing(font.get(style, []))
+            if style_path:
+                pdf.add_font(family, style, style_path)
+            else:
+                pdf.add_font(family, style, regular)
+        return family
+
+    noto_family = _FONT_BY_LANGUAGE.get(lang_code, "NotoSans")
+    regular = _download_font(noto_family, "Regular")
+    if regular:
+        bold = _download_font(noto_family, "Bold") or regular
+        italic = _download_font(noto_family, "Italic") or regular
+        bold_italic = _download_font(noto_family, "BoldItalic") or bold
+        pdf.add_font(noto_family, "", regular)
+        pdf.add_font(noto_family, "B", bold)
+        pdf.add_font(noto_family, "I", italic)
+        pdf.add_font(noto_family, "BI", bold_italic)
+        return noto_family
+
+    return "Helvetica"
+
+
+def _split_protected_text(text, protected_terms=None):
+    tokens = re.findall(r"[A-Za-z&/\-.]+", text)
+    placeholders = {}
+    protected = text
+    for term in sorted(set(protected_terms or []), key=len, reverse=True):
+        term = str(term).strip()
+        if not term or term not in protected:
+            continue
+        key = f"__SP_KEEP_{len(placeholders)}__"
+        placeholders[key] = term
+        protected = protected.replace(term, key)
+    for token in sorted(set(tokens), key=len, reverse=True):
+        normalized = token.strip(".,;:()[]{}")
+        if normalized.upper() in _ACRONYMS or re.fullmatch(r"[A-Z]{2,}[A-Z0-9&/\-.]*", normalized):
+            key = f"__SP_KEEP_{len(placeholders)}__"
+            placeholders[key] = token
+            protected = protected.replace(token, key)
+    return protected, placeholders
+
+
+def _restore_placeholders(text, placeholders):
+    for key, value in placeholders.items():
+        text = text.replace(key, value)
+    return text
+
+
+def _translate_report_text(text, lang_code, protected_terms=None):
+    if text is None:
+        return ""
+    text = str(text)
+    if not text or not lang_code or lang_code == "en":
+        return text
+    if not re.search(r"[A-Za-z]", text):
+        return text
+    protected, placeholders = _split_protected_text(text, protected_terms)
+    return _restore_placeholders(translate_text(protected, lang_code), placeholders)
+
+
+def _make_translator(lang_code, protected_terms=None):
+    def _(text):
+        return _translate_report_text(text, lang_code, protected_terms)
+    return _
+
+
+def _build_protected_terms(info, results, mod_info):
+    terms = set()
+    for key in ("project_name", "customer_name", "customer_company", "location"):
+        value = info.get(key)
+        if value:
+            terms.add(str(value))
+    for name in results.keys():
+        terms.add(str(name))
+    for item in mod_info or []:
+        for key in ("short", "name", "brand"):
+            value = item.get(key)
+            if value:
+                terms.add(str(value))
+    return [term for term in terms if len(term) > 1]
+
+
+def _translate_rows(rows, _):
+    return [[_(cell) if isinstance(cell, str) else cell for cell in row] for row in rows]
+
+
+def _translate_headers(headers, _):
+    return [_(h) if isinstance(h, str) else h for h in headers]
+
+
 # ---------------------------------------------------------------------------
 # Main generator
 # ---------------------------------------------------------------------------
@@ -235,7 +455,17 @@ def generate_report(results, project_info, chart_dir, output_path):
     mod_names = list(results.keys())
     n_mods = len(mod_names)
 
+    lang_code = info.get("language_code", "en") or "en"
+    if lang_code in RTL_LANGS:
+        # Complex RTL shaping is not reliable with the current PDF stack.
+        lang_code = "en"
+
     pdf = SolarReport()
+    font_family = _register_report_font(pdf, lang_code)
+    if lang_code != "en" and font_family == "Helvetica":
+        lang_code = "en"
+    pdf.font_family = font_family
+
     pdf.header_text = (
         f"{info.get('project_name', 'Solar Plant')} | "
         "Techno Commercial Comparison Report"
@@ -248,6 +478,8 @@ def generate_report(results, project_info, chart_dir, output_path):
     scored = info.get("scored", [])
     score_headers = info.get("score_headers", [])
     score_rows = info.get("score_rows", [])
+    protected_terms = _build_protected_terms(info, results, mod_info)
+    pdf.tr = _make_translator(lang_code, protected_terms)
     debt_ratio = float(info.get("debt_ratio", 0.70) or 0.70)
     equity_ratio = 1 - debt_ratio
     discount_rate = float(info.get("discount_rate", 0.10) or 0.10)

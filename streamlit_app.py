@@ -355,6 +355,7 @@ def _go_forward():
 # THEME SELECTION SCREEN (shown on first visit)
 # ---------------------------------------------------------------------------
 if not st.session_state.theme:
+    st.markdown("<div style='height:25px'></div>", unsafe_allow_html=True)
     startup_language = st.selectbox(
         "World Languages",
         language_options(),
@@ -1260,6 +1261,7 @@ elif step == 5:
     p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
     p_info["compliances"] = st.session_state.get("compliances", {})
     p_info["compliance_items"] = st.session_state.get("compliance_items", [])
+    p_info["language_code"] = st.session_state.get("language_code", "en")
 
     try:
         with tempfile.TemporaryDirectory() as report_dir:
