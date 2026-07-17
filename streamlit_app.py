@@ -440,19 +440,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-lang_col, theme_hint_col = st.columns([1.2, 2.8])
-with lang_col:
-    selected_page_language = st.selectbox(
-        "World Languages",
-        language_options(),
-        index=_language_index(),
-        key="page_language",
-        format_func=str,
-    )
-    _apply_language_option(selected_page_language)
-with theme_hint_col:
-    st.caption("Select your preferred language here. The app will translate the interface automatically.")
-
 # ---------------------------------------------------------------------------
 # SIDEBAR - Theme Switcher
 # ---------------------------------------------------------------------------
@@ -555,15 +542,23 @@ if step == 0:
         customer_name = st.text_input("Customer / Organisation", "", key="s_customer")
         project_name = st.text_input("Project name", "", key="s_project")
         location = st.text_input("Site location", "", key="s_location")
-        mounting_type = st.radio("Mounting structure", ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"], index=0, key="s_mounting")
     with col2:
         customer_company = st.text_input("Company", "", key="s_company")
-        plant_capacity = st.number_input("DC plant capacity (MWp)", 0.1, 500.0, 19.6, 0.1, key="s_cap")
-        latitude = st.number_input("Latitude (°)", -90.0, 90.0, 10.38, 0.01, format="%.2f", key="s_lat")
-        longitude = st.number_input("Longitude (°)", -180.0, 180.0, 78.82, 0.01, format="%.2f", key="s_lon")
-        tilt_angle = None
-        if mounting_type in ("Fixed Tilt", "Single Axis Tracker"):
-            tilt_angle = st.number_input("Tilt angle (°)", 0, 60, 10, 1, key="s_tilt")
+        p_col1, p_col2 = st.columns(2)
+        with p_col1:
+            plant_capacity = st.number_input("DC plant capacity (MWp)", 0.1, 500.0, 19.6, 0.1, key="s_cap")
+            latitude = st.number_input("Latitude (°)", -90.0, 90.0, 10.38, 0.01, format="%.2f", key="s_lat")
+        with p_col2:
+            longitude = st.number_input("Longitude (°)", -180.0, 180.0, 78.82, 0.01, format="%.2f", key="s_lon")
+            tilt_angle = None
+            current_mounting = st.session_state.get("s_mounting", "Fixed Tilt")
+            if current_mounting in ("Fixed Tilt", "Single Axis Tracker"):
+                tilt_angle = st.number_input("Tilt angle (°)", 0, 60, 10, 1, key="s_tilt")
+            else:
+                st.write("") # placeholder to keep alignment if needed
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    mounting_type = st.radio("Mounting structure", ["Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"], index=0, key="s_mounting", horizontal=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 

@@ -66,20 +66,20 @@ _ACRONYMS = {
 # ---------------------------------------------------------------------------
 
 class SolarReport(FPDF):
-    def __init__(self, *args, font_family="Helvetica", **kwargs):
+    def __init__(self, *args, custom_font_family="Helvetica", **kwargs):
         super().__init__(*args, **kwargs)
-        self.font_family = font_family
+        self.custom_font_family = custom_font_family
         self.tr = lambda text: text
 
     def t(self, text):
         return self.tr(text) if isinstance(text, str) else text
 
     def set_report_font(self, style="", size=0):
-        self.set_font(self.font_family, style, size)
+        self.set_font(self.custom_font_family, style, size)
 
     def set_font(self, family=None, style="", size=0):
-        if family == "Helvetica" and getattr(self, "font_family", "Helvetica") != "Helvetica":
-            family = self.font_family
+        if family == "Helvetica" and getattr(self, "custom_font_family", "Helvetica") != "Helvetica":
+            family = self.custom_font_family
         return super().set_font(family, style, size)
 
     def cell(self, *args, **kwargs):
@@ -461,10 +461,10 @@ def generate_report(results, project_info, chart_dir, output_path):
         lang_code = "en"
 
     pdf = SolarReport()
-    font_family = _register_report_font(pdf, lang_code)
-    if lang_code != "en" and font_family == "Helvetica":
+    custom_font_family = _register_report_font(pdf, lang_code)
+    if lang_code != "en" and custom_font_family == "Helvetica":
         lang_code = "en"
-    pdf.font_family = font_family
+    pdf.custom_font_family = custom_font_family
 
     pdf.header_text = (
         f"{info.get('project_name', 'Solar Plant')} | "
