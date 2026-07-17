@@ -1078,13 +1078,13 @@ elif step == 5:
                 
         js = f"""
         <script>
-        if (confirm("Analysis Completed, Click OK to Download Report")) {{
-            var link = document.createElement("a");
+        if (window.parent.confirm("Analysis Completed, Click OK to Download Report")) {{
+            var link = window.parent.document.createElement("a");
             link.href = "data:application/pdf;base64,{b64}";
             link.download = "{report_fn}";
-            document.body.appendChild(link);
+            window.parent.document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link);
+            window.parent.document.body.removeChild(link);
         }}
         </script>
         """
