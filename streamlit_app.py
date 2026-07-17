@@ -461,6 +461,14 @@ with st.sidebar:
         st.session_state.theme = selected_theme
         st.rerun()
 
+    st.markdown(f"<p style='font-size:0.7rem;color:{t['muted']};margin:1rem 0 0.5rem'>{tr_html('CURRENCY')}</p>", unsafe_allow_html=True)
+    if "s_cur" not in st.session_state:
+        st.session_state.s_cur = currency_options()[0]
+    currency_option = st.selectbox("Reporting currency", currency_options(), key="s_cur", label_visibility="collapsed")
+    
+    cur_info = get_currency(code_from_option(currency_option))
+    st.session_state.currency_symbol = cur_info["symbol"]
+
     try:
         admin_log_key = st.secrets.get("ADMIN_LOG_KEY", "")
     except Exception:
@@ -627,18 +635,19 @@ elif step == 1:
                         # Restore previously selected Wp if available
                         prev_wp = existing.get("power_wp") if existing else None
                         wp_index = opts.index(prev_wp) if prev_wp in opts else min(mid_idx+1, len(opts)-1)
-                        selected_wp = st.selectbox("Wp", options=opts, index=wp_index, key=f"wp_{i}", label_visibility="collapsed")
+                        selected_wp = st.selectbox("Power (Wp)", options=opts, index=wp_index, key=f"wp_{i}")
                         specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp), filename=prev_filenames.get(i, ""))
                         specs["power_wp"] = int(selected_wp)
                     elif specs:
                         prev_wp_val = int(existing.get("power_wp", 600)) if existing else 600
-                        selected_wp = st.number_input("Wp", 300, 800, prev_wp_val, 5, key=f"wp_m_{i}", label_visibility="collapsed")
+                        selected_wp = st.number_input("Power (Wp)", 300, 800, prev_wp_val, 5, key=f"wp_m_{i}")
                         specs["power_wp"] = int(selected_wp)
                         specs["power_options"] = [int(selected_wp)]
 
                 if specs:
                     prev_price = float(existing.get("price_per_wp", 22)) if existing else 22.0
-                    specs["price_per_wp"] = st.number_input(f"Price/Wp", 5.0, 50.0, float(prev_price), 0.5, key=f"price_{i}", label_visibility="collapsed")
+                    sym = st.session_state.get("currency_symbol", "$")
+                    specs["price_per_wp"] = st.number_input(f"Price/Wp ({sym})", 5.0, 50.0, float(prev_price), 0.5, key=f"price_{i}")
                     specs["_filename"] = prev_filenames.get(i, "")
 
                     # Extracted specs toggle
@@ -720,8 +729,6 @@ elif step == 3:
         weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws")
         ground_albedo = st.number_input("Ground albedo", 0.0, 0.9, 0.20, 0.05, key="s_albedo")
         mounting_height_m = st.number_input("Mounting height (m)", 0.5, 3.0, 1.0, 0.1, key="s_height")
-        st.markdown("**Currency**")
-        currency_option = st.selectbox("Reporting currency", currency_options(), index=0, key="s_cur")
     with col2:
         st.markdown("**Revenue & financing**")
         ppa_tariff = st.number_input("PPA tariff (per kWh)", 1.0, 10.0, 4.50, 0.25, key="s_ppa")
@@ -739,6 +746,7 @@ elif step == 3:
         st.markdown("**Model defaults**")
         st.caption("25-year operating life · 0.55% annual degradation · 2.0% O&M of base cost")
 
+    currency_option = st.session_state.get("s_cur", currency_options()[0])
     cur = get_currency(code_from_option(currency_option))
     F = make_formatter(cur)
     sym = F["symbol"]
