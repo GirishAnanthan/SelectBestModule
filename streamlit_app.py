@@ -672,8 +672,7 @@ elif step == 3:
         mounting_height_m = st.number_input("Mounting height (m)", 0.5, 3.0, 1.0, 0.1, key="s_height")
         
         st.write("") # spacer
-        st.markdown("**Cost assumptions**")
-        bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
+        bos_cost = st.number_input("Cost Assumptions/Wp for (BOS + EPC + Land & Approvals)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
         discount_rate = st.number_input("Equity discount rate (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
 
     with col2:
