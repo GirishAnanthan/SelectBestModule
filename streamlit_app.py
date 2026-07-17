@@ -933,317 +933,171 @@ elif step == 5:
         })
 
     # Show Generate/Regenerate button if needed
-    if not st.session_state.report_generated or st.session_state.inputs_dirty:
-        status_msg = tr("Regenerate Report" if st.session_state.report_generated else "Ready to Generate Report")
-        detail = tr("Inputs have been modified since last generation.") if st.session_state.inputs_dirty else f"{len(mod_list)} {tr('modules configured')} | {plant_capacity} MW DC | {location}"
+    if not st.session_state.get("print_pending"):
+        status_msg = tr("Ready to Print Report")
+        detail = f"{len(mod_list)} {tr('modules configured')} | {plant_capacity} MW DC | {location}"
         st.markdown(f"""<div style="text-align:center;padding:2rem;background:{t['card']};border:1px solid {t['border']};border-radius:10px;margin:1rem 0">
             <div style="font-family:'Playfair Display',serif;font-size:1.2rem;color:{t['heading']};margin-bottom:0.5rem">{html.escape(status_msg, quote=False)}</div>
             <p style="font-size:0.8rem;color:{t['muted']};margin:0">{html.escape(detail, quote=False)}</p>
         </div>""", unsafe_allow_html=True)
 
-        btn_label = "Regenerate Investor-Grade Report" if st.session_state.report_generated else "Generate Investor-Grade Report"
-        if st.button(btn_label, key="gen_report_btn", type="primary", use_container_width=True):
-            st.session_state.inputs_dirty = False
-            st.session_state.report_generated = True
+        if st.button("Print Report", key="gen_report_btn", type="primary", use_container_width=True):
+            st.session_state.print_pending = True
             st.rerun()
-
-        # If we have old results, show them below the button
-        if st.session_state.report_generated and st.session_state.results is not None:
-            st.info("Showing previous results below. Click regenerate to update.")
-            results = st.session_state.results
-            chart_paths = st.session_state.chart_paths or {}
-            scored = (st.session_state.project_info or {}).get("scored", [])
-            mod_names = list(results.keys())
-            weather_data = st.session_state.get("weather_data")
-        else:
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.stop()
-
-    # ---- We have fresh or existing results to display ----
-    _show_cached = False
-    if st.session_state.report_generated and st.session_state.results is not None and not st.session_state.inputs_dirty:
-        results = st.session_state.results
-        chart_paths = st.session_state.chart_paths or {}
-        scored = (st.session_state.project_info or {}).get("scored", [])
-        mod_names = list(results.keys())
-        weather_data = st.session_state.get("weather_data")
-        if st.button("← Back to Editing", key="back_edit_btn", type="secondary", on_click=_go_back, use_container_width=False):
-            pass
-        _show_cached = True
-    elif st.session_state.inputs_dirty:
+            
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
-
-    if not _show_cached:
-        # ---- RUN FRESH ANALYSIS ----
-        # Test the selected weather API directly. Generic connectivity checks can
-        # fail on Streamlit Cloud even when NASA/PVGIS are reachable.
-        weather_source_label = weather_source
-        project_params_for_run = project_params
-        weather_data = None
-        if ws == "api":
-            with st.spinner("Fetching NASA POWER weather data..."):
-                weather_data = cached_nasa(latitude, longitude)
-        elif ws == "pvgis":
-            with st.spinner("Fetching PVGIS weather data..."):
-                weather_data = cached_pvgis(latitude, longitude)
-
-        if ws in ("api", "pvgis") and weather_data is None:
-            st.error("Weather data source unavailable")
-            st.markdown(f"""
-            **The selected weather source did not return usable data.**
-
-            Source selected: **{weather_source}**
-
-            This can happen if the weather API is temporarily unavailable, blocked by the Streamlit Cloud network,
-            rate-limited, or unable to serve the selected coordinates.
-
-            You can retry after some time, choose **Simplified Estimate**, or continue now with latitude-based estimated weather values.
-            """)
-            if st.button("✅ Continue With Estimated Weather Data", key="weather_fallback_btn", type="primary"):
-                project_params_for_run = dict(project_params)
-                project_params_for_run["weather_source"] = "estimate"
-                weather_source_label = "Estimated Fallback"
-            else:
-                st.stop()
-        project_params = project_params_for_run
         
-        try:
-            with st.spinner("Running comprehensive analysis..."):
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    results, chart_paths = run_analysis(mod_list, project_params_for_run, tmpdir, weather_data=weather_data)
+    # We are now printing
+    st.session_state.print_pending = False
+    
+    # ---- RUN FRESH ANALYSIS & PRINT ----
+    # Test the selected weather API directly. Generic connectivity checks can
+    # fail on Streamlit Cloud even when NASA/PVGIS are reachable.
+    weather_source_label = weather_source
+    project_params_for_run = project_params
+    weather_data = None
+    if ws == "api":
+        with st.spinner("Fetching NASA POWER weather data..."):
+            weather_data = cached_nasa(latitude, longitude)
+    elif ws == "pvgis":
+        with st.spinner("Fetching PVGIS weather data..."):
+            weather_data = cached_pvgis(latitude, longitude)
 
-                    _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
-                              "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
-                    _wsum = sum(_raw_w.values()) or 1
-                    weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
-                    scored = compute_scores(results, mod_list, weights)
-                    mod_names = [m["short"] for m in mod_list]
+    if ws in ("api", "pvgis") and weather_data is None:
+        st.error("Weather data source unavailable")
+        st.markdown(f"""
+        **The selected weather source did not return usable data.**
 
-                    # Persist charts before tmpdir closes. Use a per-session directory
-                    # to avoid mixing charts between concurrent Streamlit users.
-                    _charts_dir = st.session_state.chart_cache_dir
-                    os.makedirs(_charts_dir, exist_ok=True)
-                    _persistent_paths = {}
-                    for cname, cpath in (chart_paths or {}).items():
-                        if os.path.exists(cpath):
-                            _dest = os.path.join(_charts_dir, cname)
-                            import shutil; shutil.copy2(cpath, _dest)
-                            _persistent_paths[cname] = _dest
-                    chart_paths = _persistent_paths
+        Source selected: **{weather_source}**
 
-                # store in session
-                st.session_state.results = results
-                st.session_state.chart_paths = chart_paths
-                st.session_state.project_info = {
-                    "project_name": project_name, "customer_name": customer_name,
-                    "customer_company": customer_company, "plant_capacity": f"{plant_capacity:.1f}",
-                    "location": location, "latitude": str(latitude), "longitude": str(longitude),
-                    "date": datetime.now().strftime("%B %Y"), "mounting_type": mounting_type,
-                    "tilt_angle": tilt_angle, "scored": scored, "currency": cur,
-                    "weather_summary": get_weather_summary(weather_data), "weather_source": weather_source_label,
-                    "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
-                    "ppa_tariff": ppa_tariff, "tariff_esc": tariff_esc,
-                    "debt_ratio": debt_ratio, "interest_rate": interest_rate,
-                    "loan_tenure": loan_tenure, "discount_rate": discount_rate,
-                    "bos_cost": bos_cost, "tax_rate": project_params_for_run.get("tax_rate", 0.2517),
-                    "bifacial_detected": any(s.get("bifacial",False) for s in module_specs_list if s),
-                }
-                st.session_state.mod_list = mod_list
-                st.session_state.weather_data = weather_data
-                st.session_state.project_params = project_params_for_run
+        This can happen if the weather API is temporarily unavailable, blocked by the Streamlit Cloud network,
+        rate-limited, or unable to serve the selected coordinates.
 
-                st.session_state.chart_paths = chart_paths
-        except Exception as _analysis_err:
-            _log_app_error("analysis", _analysis_err, {
-                "weather_source": weather_source,
-                "module_count": len(mod_list) if 'mod_list' in locals() else None,
-                "location": location,
-            })
-            st.error(f"**Analysis failed:** {_analysis_err}")
-            st.markdown(f"""
-            <div style="background:#1a1a2e;border:1px solid #e74c3c40;border-radius:8px;padding:1.2rem;margin:1rem 0;">
-                <p style="color:#e8edf2;font-size:0.85rem;margin:0 0 0.5rem;">
-                    {tr_html('The analysis could not complete. Please check your inputs and try again.')}
-                </p>
-                <p style="color:#7a9bb5;font-size:0.75rem;margin:0;">
-                    <strong>{tr_html('Common causes')}:</strong> {tr_html('Invalid financial parameters, weather data issues, or module specification errors.')}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("← Back to Edit Inputs", type="secondary"):
-                st.session_state.inputs_dirty = True
-                st.rerun()
+        You can retry after some time, choose **Simplified Estimate**, or continue now with latitude-based estimated weather values.
+        """)
+        if st.button("✅ Continue With Estimated Weather Data", key="weather_fallback_btn", type="primary"):
+            project_params_for_run = dict(project_params)
+            project_params_for_run["weather_source"] = "estimate"
+            weather_source_label = "Estimated Fallback"
+        else:
             st.stop()
-
-    # ---- RESULTS DISPLAY ----
-    st.success("Analysis complete")
-
-    # metrics row
-    metric_cols = st.columns(len(mod_names))
-    for i, name in enumerate(mod_names):
-        r = results[name]
-        with metric_cols[i]:
-            st.metric(f"{name} — IRR", f"{r['irr']*100:.2f}%")
-            st.metric(f"{name} — Project Cost", F["money"](r["total_cost"]))
-    best = scored[0]["short"] if scored else mod_names[0]
-    score_text = f" ({tr('Score')}: {scored[0]['weighted_total']:.1f}/100)" if scored else ""
-    st.markdown(f"<div style='text-align:center;padding:0.5rem 0;font-size:0.85rem;color:{t['accent']};font-weight:600'>&#10022; {tr_html('Recommended')}: {html.escape(str(best), quote=False)}{html.escape(score_text, quote=False)}</div>", unsafe_allow_html=True)
-
-    # charts
-    st.markdown("### Charts")
-    ch_cols = st.columns(2)
-    ch_names = list(chart_paths.keys())
-    for i, cn in enumerate(ch_names):
-        with ch_cols[i % 2]:
-            if os.path.exists(chart_paths[cn]):
-                st.image(chart_paths[cn], caption=tr(cn.replace(".png","").replace("_"," ").title()), width="stretch")
-
-    # scoring table
-    st.markdown("### Multi-Criteria Scoring")
-    score_headers, score_rows = format_scoring_table(scored)
-    score_headers_ui = [tr(h) for h in score_headers]
-    score_df = [dict(zip(score_headers_ui, row)) for row in score_rows]
-    st.table(score_df)
-
-    # scenario
-    with st.expander("Scenario & Sensitivity", expanded=False):
-        sc_c1, sc_c2 = st.columns(2)
-        with sc_c1:
-            scenario_mounting = st.selectbox("Alternate mounting", ["None", "Fixed Tilt", "Single Axis Tracker", "Dual Axis Tracker"], index=0, key="sc_mount")
-        with sc_c2:
-            force_bif = st.checkbox("Force bifacial for all modules", key="sc_bif")
-        sens_range = st.slider("Sensitivity range (+/- %)", 5, 30, 10, 1, key="sc_range")
-
-        if scenario_mounting != "None" or force_bif:
-            sc_p = dict(project_params)
-            if scenario_mounting != "None":
-                sc_p["mounting_type"] = scenario_mounting
-                if scenario_mounting != "Fixed Tilt":
-                    sc_p["tilt_angle"] = None
-            sc_ml = [dict(m, bifacial=True) for m in mod_list] if force_bif else mod_list
-            with tempfile.TemporaryDirectory() as sc_d:
-                sc_r, _ = run_analysis(sc_ml, sc_p, sc_d, weather_data=weather_data, skip_charts=True)
-            scc = st.columns(len(mod_names))
-            for i, name in enumerate(mod_names):
-                base = results[name]
-                sc = sc_r[name]
-                with scc[i]:
-                    st.metric(f"{name} IRR", f"{sc['irr']*100:.2f}%", f"{(sc['irr']-base['irr'])*100:+.2f}%")
-                    st.metric(f"{name} NPV", F["money"](sc["npv"]), f"{F['money'](sc['npv']-base['npv'])}")
-                    st.metric(f"{name} LCOE", f"{sc['lcoe']:.3f}", f"{sc['lcoe']-base['lcoe']:+.3f}")
-
-        # tornado
-        best_name = scored[0]["short"] if scored else mod_names[0]
-        base_irr = results[best_name]["irr"]*100
-        def _fn_tariff(p,m,s): p2=dict(p); p2["ppa_tariff"]=p["ppa_tariff"]*(1+s/100); return p2,m
-        def _fn_price(p,m,s): m2=[dict(x,price_per_wp=x["price_per_wp"]*(1+s/100)) for x in m]; return p,m2
-        def _fn_int(p,m,s): p2=dict(p); p2["interest_rate"]=p["interest_rate"]*(1+s/100); return p2,m
-        def _fn_debt(p,m,s): p2=dict(p); p2["debt_ratio"]=min(.95,max(.4,p["debt_ratio"]*(1+s/100))); return p2,m
-        def _fn_deg(p,m,s): m2=[dict(x,deg_annual_pct=min(2.0,x["deg_annual_pct"]*(1+s/100))) for x in m]; return p,m2
-        def _fn_eff(p,m,s): m2=[dict(x,efficiency_pct=x["efficiency_pct"]*(1+s/100)) for x in m]; return p,m2
-        def _fn_bos(p,m,s): p2=dict(p); p2["bos_per_w"]=p["bos_per_w"]*(1+s/100); return p2,m
-
-        drivers = [("PPA Tariff",_fn_tariff),("Module Price",_fn_price),("Interest Rate",_fn_int),
-                   ("Debt Ratio",_fn_debt),("Degradation",_fn_deg),("Efficiency",_fn_eff),("BoS Cost",_fn_bos)]
-        lows, highs, labels = [], [], []
-        for lab, fn in drivers:
-            p_lo, m_lo = fn(project_params, mod_list, -sens_range)
-            p_hi, m_hi = fn(project_params, mod_list, +sens_range)
-            with tempfile.TemporaryDirectory() as d:
-                r_lo, _ = run_analysis(m_lo, p_lo, d, weather_data=weather_data, skip_charts=True)
-                r_hi, _ = run_analysis(m_hi, p_hi, d, weather_data=weather_data, skip_charts=True)
-            lows.append(r_lo[best_name]["irr"]*100 - base_irr)
-            highs.append(r_hi[best_name]["irr"]*100 - base_irr)
-            labels.append(lab)
-
-        import plotly.graph_objects as go
-        fig = go.Figure()
-        for i, lab in enumerate(labels):
-            fig.add_trace(go.Scatter(x=[lows[i],highs[i]], y=[i,i], mode="lines+markers",
-                line=dict(color="gray",width=1.5), marker=dict(size=8,color=["#e74c3c","#27ae60"]), showlegend=False))
-        fig.add_vline(x=0, line=dict(color="white",width=1))
-        fig.update_layout(
-            title=f"IRR Sensitivity — {best_name}",
-            xaxis=dict(title=f"IRR change vs base (%-pts) | base {base_irr:.1f}%", gridcolor="rgba(255,255,255,0.06)"),
-            yaxis=dict(tickmode="array", tickvals=list(range(len(labels))), ticktext=labels),
-            template="none", height=350,
-            paper_bgcolor=t['bg'], plot_bgcolor=t['bg'],
-            font=dict(color=t['muted'], size=10),
-            margin=dict(l=10,r=10,t=40,b=40),
-        )
-        st.plotly_chart(fig, width="stretch")
-
-    # CSV export
-    import csv as _csv
-    _buf = io.StringIO()
-    _cw = _csv.writer(_buf)
-    _cw.writerow(["Module","IRR_%","NPV","Total_Cost","LCOE","Gen_Y1_kWh","CUF_%","Payback_yrs","Module_Count"])
-    for n in mod_names:
-        r = results[n]
-        _cw.writerow([n, round(r["irr"]*100,2), round(r["npv"],2), round(r["total_cost"],2), round(r["lcoe"],4),
-                      round(r["gen_y1_kwh"],0), round(r["cuf"]*100,2), r["payback"], r["module_count"]])
-    st.download_button("Export CSV", data=_buf.getvalue(), file_name="comparison_results.csv", mime="text/csv")
-
-    # PDF report
-    spec_rows = []
-    for i, specs in enumerate(module_specs_list):
-        if specs is None: continue
-        mfr = _get_mfr_name(specs, i)
-        spec_rows.append([f"Module {i+1} Model", f"{specs.get('power_wp','')}Wp", ""])
-        spec_rows.append([f"Module {i+1} Technology", specs.get("technology",""), ""])
-        spec_rows.append([f"Module {i+1} Manufacturer", mfr, ""])
-        r_mod = results.get(mfr,{})
-        spec_rows.append([f"Module {i+1} Count", f'{r_mod.get("module_count",0):,}', "nos"])
-    mod_info = [{"short":_get_mfr_name(module_specs_list[i], i),
-                 "name":f"{_get_mfr_name(module_specs_list[i], i)} ({module_specs_list[i].get('power_wp','')}Wp)",
-                 "brand":_get_mfr_name(module_specs_list[i], i), "wp":module_specs_list[i].get("power_wp",600)}
-                for i in range(len(module_specs_list)) if module_specs_list[i]]
-
-    plist = [f"Location: {location} ({latitude}, {longitude})",
-             f"Plant Capacity: {plant_capacity:.1f} MW DC",
-             f"Configuration: {mounting_type}{' (Tilt: '+str(tilt_angle)+'°)' if tilt_angle else ''}",
-             f"PPA Tariff: {sym} {ppa_tariff:.2f}/kWh",
-             f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
-             f"Interest: {interest_rate*100:.0f}% p.a., {loan_tenure}-yr",
-             f"BoS & EPC: {sym} {bos_cost:.1f}/Wp",
-             f"Weather: {get_weather_summary(weather_data)}"]
-
-    p_info = dict(st.session_state.project_info)
-    p_info.update(spec_rows=spec_rows, project_params=plist, mod_info=mod_info)
-    p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
-    p_info["compliances"] = st.session_state.get("compliances", {})
-    p_info["compliance_items"] = st.session_state.get("compliance_items", [])
-    p_info["language_code"] = st.session_state.get("language_code", "en")
-
+    project_params = project_params_for_run
+    
     try:
-        with tempfile.TemporaryDirectory() as report_dir:
-            # Copy only this session's charts into report_dir so PDF can find them.
-            import shutil
-            for cname, cpath in (chart_paths or {}).items():
-                if cpath and os.path.exists(cpath):
-                    shutil.copy2(cpath, os.path.join(report_dir, cname))
+        with st.spinner("Running comprehensive analysis..."):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                results, chart_paths = run_analysis(mod_list, project_params_for_run, tmpdir, weather_data=weather_data)
 
-            report_path = os.path.join(report_dir, "investment_report.pdf")
-            gen_report(results, p_info, report_dir, report_path)
+                _raw_w = {"lcoe":w_lcoe, "irr":w_irr, "generation_yield":w_gen, "degradation":w_deg,
+                          "warranty":w_warr, "price":w_price, "temp_coeff":w_tc}
+                _wsum = sum(_raw_w.values()) or 1
+                weights = {k: round(v/_wsum*100) for k,v in _raw_w.items()}
+                scored = compute_scores(results, mod_list, weights)
+                mod_names = [m["short"] for m in mod_list]
 
-            name_parts = []
-            for i in range(len(module_specs_list)):
-                mfr = _get_mfr_name(module_specs_list[i], i)
-                name_parts.append(mfr.replace("/","_").replace("\\","_").split()[0])
-            report_fn = f"SolarPro_Report_{'_vs_'.join(name_parts)}.pdf"
+                # Persist charts before tmpdir closes. Use a per-session directory
+                # to avoid mixing charts between concurrent Streamlit users.
+                _charts_dir = st.session_state.chart_cache_dir
+                os.makedirs(_charts_dir, exist_ok=True)
+                _persistent_paths = {}
+                for cname, cpath in (chart_paths or {}).items():
+                    if os.path.exists(cpath):
+                        _dest = os.path.join(_charts_dir, cname)
+                        import shutil; shutil.copy2(cpath, _dest)
+                        _persistent_paths[cname] = _dest
+                chart_paths = _persistent_paths
 
-            with open(report_path, "rb") as f:
-                st.download_button("Download Investment-Grade PDF Report", data=f.read(),
-                                   file_name=report_fn, mime="application/pdf", type="primary")
-    except Exception as _report_err:
-        _log_app_error("report_generation", _report_err, {
-            "project_name": project_name,
-            "module_count": len(module_specs_list) if module_specs_list else 0,
-            "chart_count": len(chart_paths or {}),
+            # --- PRINT REPORT PDF GENERATION ---
+            p_info = {
+                "project_name": project_name, "customer_name": customer_name,
+                "customer_company": customer_company, "plant_capacity": f"{plant_capacity:.1f}",
+                "location": location, "latitude": str(latitude), "longitude": str(longitude),
+                "date": datetime.now().strftime("%B %Y"), "mounting_type": mounting_type,
+                "tilt_angle": tilt_angle, "scored": scored, "currency": cur,
+                "weather_summary": get_weather_summary(weather_data), "weather_source": weather_source_label,
+                "ground_albedo": ground_albedo, "mounting_height_m": mounting_height_m,
+                "ppa_tariff": ppa_tariff, "tariff_esc": tariff_esc,
+                "debt_ratio": debt_ratio, "interest_rate": interest_rate,
+                "loan_tenure": loan_tenure, "discount_rate": discount_rate,
+                "bos_cost": bos_cost, "tax_rate": project_params_for_run.get("tax_rate", 0.2517),
+                "bifacial_detected": any(s.get("bifacial",False) for s in module_specs_list if s),
+            }
+
+            score_headers, score_rows = format_scoring_table(scored)
+            spec_rows = []
+            for i, specs in enumerate(module_specs_list):
+                if specs is None: continue
+                mfr = _get_mfr_name(specs, i)
+                spec_rows.append([f"Module {i+1} Model", f"{specs.get('power_wp','')}Wp", ""])
+                spec_rows.append([f"Module {i+1} Technology", specs.get("technology",""), ""])
+                spec_rows.append([f"Module {i+1} Manufacturer", mfr, ""])
+                r_mod = results.get(mfr,{})
+                spec_rows.append([f"Module {i+1} Count", f'{r_mod.get("module_count",0):,}', "nos"])
+            mod_info = [{"short":_get_mfr_name(module_specs_list[i], i),
+                         "name":f"{_get_mfr_name(module_specs_list[i], i)} ({module_specs_list[i].get('power_wp','')}Wp)",
+                         "brand":_get_mfr_name(module_specs_list[i], i), "wp":module_specs_list[i].get("power_wp",600)}
+                        for i in range(len(module_specs_list)) if module_specs_list[i]]
+
+            sym = F["symbol"]
+            plist = [f"Location: {location} ({latitude}, {longitude})",
+                     f"Plant Capacity: {plant_capacity:.1f} MW DC",
+                     f"Configuration: {mounting_type}{' (Tilt: '+str(tilt_angle)+'°)' if tilt_angle else ''}",
+                     f"PPA Tariff: {sym} {ppa_tariff:.2f}/kWh",
+                     f"Debt:Equity: {int(debt_ratio*100)}:{int((1-debt_ratio)*100)}",
+                     f"Interest: {interest_rate*100:.0f}% p.a., {loan_tenure}-yr",
+                     f"BoS & EPC: {sym} {bos_cost:.1f}/Wp",
+                     f"Weather: {get_weather_summary(weather_data)}"]
+
+            p_info.update(spec_rows=spec_rows, project_params=plist, mod_info=mod_info)
+            p_info["score_headers"], p_info["score_rows"] = score_headers, score_rows
+            p_info["compliances"] = st.session_state.get("compliances", {})
+            p_info["compliance_items"] = st.session_state.get("compliance_items", [])
+            p_info["language_code"] = st.session_state.get("language_code", "en")
+
+            with tempfile.TemporaryDirectory() as report_dir:
+                import shutil
+                for cname, cpath in (chart_paths or {}).items():
+                    if cpath and os.path.exists(cpath):
+                        shutil.copy2(cpath, os.path.join(report_dir, cname))
+                report_path = os.path.join(report_dir, "investment_report.pdf")
+                gen_report(results, p_info, report_dir, report_path)
+                
+                name_parts = []
+                for i in range(len(module_specs_list)):
+                    if module_specs_list[i]:
+                        mfr = _get_mfr_name(module_specs_list[i], i)
+                        name_parts.append(mfr.replace("/","_").replace("\\","_").split()[0])
+                report_fn = f"SolarPro_Report_{'_vs_'.join(name_parts)}.pdf"
+                
+                with open(report_path, "rb") as f:
+                    pdf_bytes = f.read()
+                    
+                import base64
+                b64 = base64.b64encode(pdf_bytes).decode()
+                js = f"""
+                <script>
+                var link = document.createElement("a");
+                link.href = "data:application/pdf;base64,{b64}";
+                link.download = "{report_fn}";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                </script>
+                """
+                st.components.v1.html(js, height=0)
+                st.success(tr("Report successfully generated and printed to PDF! Check your downloads."))
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.stop()
+
+    except Exception as _analysis_err:
+        _log_app_error("analysis", _analysis_err, {
+            "weather_source": weather_source,
+            "module_count": len(mod_list) if 'mod_list' in locals() else None,
+            "location": location,
         })
-        st.error(f"**Report generation failed:** {_report_err}")
-        st.info("Your analysis results are still available. Try refreshing the page or going back to edit inputs.")
+        st.error(f"**Print failed:** {_analysis_err}")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
