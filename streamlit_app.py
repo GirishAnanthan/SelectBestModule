@@ -985,7 +985,7 @@ elif step == 5:
     project_params = project_params_for_run
     
     try:
-        with st.spinner("Running comprehensive analysis..."):
+        with st.spinner("Please Wait, a Detailed Analysis is being performed"):
             with tempfile.TemporaryDirectory() as tmpdir:
                 results, chart_paths = run_analysis(mod_list, project_params_for_run, tmpdir, weather_data=weather_data)
 
@@ -1075,21 +1075,22 @@ elif step == 5:
                     
                 import base64
                 b64 = base64.b64encode(pdf_bytes).decode()
-                js = f"""
-                <script>
-                var link = document.createElement("a");
-                link.href = "data:application/pdf;base64,{b64}";
-                link.download = "{report_fn}";
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                </script>
-                """
-                st.components.v1.html(js, height=0)
-                st.success(tr("Report successfully generated and printed to PDF! Check your downloads."))
                 
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.stop()
+        js = f"""
+        <script>
+        if (confirm("Analysis Completed, Click OK to Download Report")) {{
+            var link = document.createElement("a");
+            link.href = "data:application/pdf;base64,{b64}";
+            link.download = "{report_fn}";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }}
+        </script>
+        """
+        st.components.v1.html(js, height=0)
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
 
     except Exception as _analysis_err:
         _log_app_error("analysis", _analysis_err, {
