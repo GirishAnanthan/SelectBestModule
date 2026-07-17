@@ -168,8 +168,8 @@ section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
 .section-eyebrow {{ font-family: 'DM Mono', monospace; font-size: 0.6rem; color: {t['accent']}; letter-spacing: 0.12em; }}
 .section-heading h2 {{ font-family: 'Playfair Display', serif; font-size: 1.3rem; color: {t['heading']}; margin: 0.2rem 0; }}
 .section-heading p {{ font-size: 0.75rem; color: {t['text']}; margin: 0 0 1.2rem; opacity: 0.7; }}
-.stTextInput>div>div>input, .stNumberInput>div>div>input, .stTextArea textarea {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.4rem 0.7rem !important; }}
-div[data-baseweb="select"] > div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; min-height: 2.9rem !important; }}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, .stTextArea textarea {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; padding: 0.2rem 0.6rem !important; min-height: 2.2rem !important; }}
+div[data-baseweb="select"] > div {{ background: {t['card']} !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; color: {t['text']} !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; min-height: 2.2rem !important; }}
 .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus, div[data-baseweb="select"] > div:focus-within {{ border-color: {t['accent']} !important; box-shadow: 0 0 0 1px {t['accent']} !important; }}
 div[data-baseweb="popover"], div[role="listbox"], div[role="option"] {{ background: {t['card']} !important; color: {t['text']} !important; }}
 label {{ color: {t['text']} !important; font-size: 0.75rem !important; font-weight: 500 !important; }}
@@ -195,6 +195,13 @@ div[data-testid="metric-container"] > div:nth-child(2) {{ font-size: 1.2rem !imp
 .stAlert {{ border-radius: 6px !important; font-size: 0.75rem !important; }}
 .st-cb {{ color: {t['text']} !important; }}
 .st-b8 {{ color: {t['text']} !important; }}
+
+/* Compact Layout Overrides */
+div[data-testid="stVerticalBlock"] {{ gap: 0.5rem !important; }}
+div[data-testid="stForm"] > div > div {{ gap: 0.5rem !important; }}
+div[data-testid="stElementContainer"] {{ margin-bottom: 0 !important; }}
+.stMarkdown {{ margin-bottom: -0.2rem !important; }}
+
 @media (max-width:768px){{ .form-grid, .form-grid.three {{ grid-template-columns: 1fr; }} }}
 footer {{ display: none; }}
 </style>
