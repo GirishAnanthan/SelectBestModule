@@ -646,9 +646,6 @@ elif step == 1:
                         st.text(format_specs_for_display(specs))
 
                     # Editable fields — restore from existing if available
-                    vmp = st.number_input("Vmp (V)", 0.0, 100.0, float(existing.get("vmp", specs.get("vmp",0) or 0) if existing else specs.get("vmp",0) or 0), key=f"vmp_{i}")
-                    imp = st.number_input("Imp (A)", 0.0, 30.0, float(existing.get("imp", specs.get("imp",0) or 0) if existing else specs.get("imp",0) or 0), key=f"imp_{i}")
-                    voc = st.number_input("Voc (V)", 0.0, 100.0, float(existing.get("voc", specs.get("voc",0) or 0) if existing else specs.get("voc",0) or 0), key=f"voc_{i}")
                     eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(existing.get("efficiency_pct", specs.get("efficiency_pct",0) or 0) if existing else specs.get("efficiency_pct",0) or 0), key=f"eff_{i}")
                     tc = st.number_input("TC Pmax (%/°C)", 0.0, 1.0, float(abs(existing.get("temp_coeff_pmax", specs.get("temp_coeff_pmax",0) or 0) if existing else specs.get("temp_coeff_pmax",0) or 0)), key=f"tc_{i}")
                     deg_y1 = st.number_input("Y1 Degr. (%)", 0.0, 5.0, float(existing.get("deg_y1_pct", specs.get("deg_y1_pct",0) or 0) if existing else specs.get("deg_y1_pct",0) or 0), key=f"deg_y1_{i}")
@@ -656,7 +653,7 @@ elif step == 1:
                     noct = st.number_input("NOCT (°C)", 0, 60, int(existing.get("noct", specs.get("noct",0) or 0) if existing else specs.get("noct",0) or 0), key=f"noct_{i}")
                     pw = st.number_input("Warranty (yr)", 0, 40, int(existing.get("warranty_power", specs.get("warranty_power",0) or 0) if existing else specs.get("warranty_power",0) or 0), key=f"pw_{i}")
 
-                    specs.update(vmp=vmp, imp=imp, voc=voc, efficiency_pct=eff, temp_coeff_pmax=-tc, deg_y1_pct=deg_y1, deg_annual_pct=deg_ann, noct=noct, warranty_power=pw)
+                    specs.update(efficiency_pct=eff, temp_coeff_pmax=-tc, deg_y1_pct=deg_y1, deg_annual_pct=deg_ann, noct=noct, warranty_power=pw)
                     st.caption(f"Extracted via {specs.get('_extraction_method','N/A')}")
             else:
                 if not existing:
