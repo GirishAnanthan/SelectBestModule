@@ -957,24 +957,27 @@ def parse_pan_specs(text):
     """
     specs = {}
     
-    # Common mappings from PAN keys to our schema keys
+    # Common mappings from PAN keys (case-insensitive) to our schema keys
     key_mapping = {
-        "PNom": ("power_wp", float),
-        "Vmpp": ("vmp", float),
-        "Impp": ("imp", float),
-        "Voc": ("voc", float),
-        "Isc": ("isc", float),
-        "muPmpp": ("temp_coeff_pmax", float),
-        "muVoc": ("temp_coeff_voc", float),
-        "muIsc": ("temp_coeff_isc", float),
-        "Length": ("length_mm", float),
-        "Width": ("width_mm", float),
-        "Depth": ("thickness_mm", float),
-        "Weight": ("weight_kg", float),
-        "NCelS": ("cell_count", int),
-        "Manufacturer": ("manufacturer", str),
-        "Model": ("model", str),
-        "Bifacial": ("bifacial", lambda x: bool(int(x)) if x.isdigit() else x.lower() == 'true')
+        "pnom": ("power_wp", float),
+        "vmp": ("vmp", float),
+        "imp": ("imp", float),
+        "voc": ("voc", float),
+        "isc": ("isc", float),
+        "mupmpreq": ("temp_coeff_pmax", float),
+        "muvocspec": ("temp_coeff_voc", float), # Note: often in mV/C
+        "muisc": ("temp_coeff_isc", float), # Note: often in mA/C
+        "height": ("length_mm", lambda x: float(x) * 1000), # PAN uses meters
+        "width": ("width_mm", lambda x: float(x) * 1000), # PAN uses meters
+        "depth": ("thickness_mm", lambda x: float(x) * 1000), # PAN uses meters
+        "weight": ("weight_kg", float),
+        "ncels": ("cell_count", int),
+        "manufacturer": ("manufacturer", str),
+        "model": ("model", str),
+        "bifacial": ("bifacial", lambda x: bool(int(x)) if x.isdigit() else x.lower() == 'true'),
+        "warrpower": ("warranty_power", int),
+        "warrproduct": ("warranty_product", int),
+        "warranty": ("warranty_product", int),
     }
     
     lines = text.splitlines()
@@ -983,11 +986,11 @@ def parse_pan_specs(text):
         if not line or line.startswith('[') or '=' not in line:
             continue
         key, val = line.split('=', 1)
-        key = key.strip()
+        key_lower = key.strip().lower()
         val = val.strip()
         
-        if key in key_mapping:
-            target_key, converter = key_mapping[key]
+        if key_lower in key_mapping:
+            target_key, converter = key_mapping[key_lower]
             try:
                 specs[target_key] = converter(val)
             except Exception:
@@ -1005,6 +1008,17 @@ def parse_pan_specs(text):
         area = (specs["length_mm"] / 1000.0) * (specs["width_mm"] / 1000.0)
         if area > 0:
             specs["efficiency_pct"] = (specs["power_wp"] / (area * 1000.0)) * 100.0
+            
+    # Convert PAN specific temperature coefficients if needed
+    if "temp_coeff_voc" in specs and "voc" in specs:
+        # If it's < -1, it's likely in mV/C (e.g. -140.0). We need %/C
+        if specs["temp_coeff_voc"] < -1.0:
+            specs["temp_coeff_voc"] = (specs["temp_coeff_voc"] / 1000.0) / specs["voc"] * 100.0
+            
+    if "temp_coeff_isc" in specs and "isc" in specs:
+        # If it's > 1, it's likely in mA/C (e.g. 11.14). We need %/C
+        if specs["temp_coeff_isc"] > 1.0:
+            specs["temp_coeff_isc"] = (specs["temp_coeff_isc"] / 1000.0) / specs["isc"] * 100.0
             
     # Default values for fields not in standard PAN
     if "noct" not in specs: specs["noct"] = 43
