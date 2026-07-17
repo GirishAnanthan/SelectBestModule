@@ -665,37 +665,36 @@ elif step == 3:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
 
     st.markdown("**Weather & site**")
-    c1, c2, c3, c4 = st.columns(4)
+    weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws", horizontal=True)
+    c1, c2, c3 = st.columns(3)
     with c1:
-        weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws", horizontal=True)
-    with c2:
         ground_albedo = st.number_input("Ground albedo", 0.0, 0.9, 0.20, 0.05, key="s_albedo")
-    with c3:
+    with c2:
         mounting_height_m = st.number_input("Mounting height (m)", 0.5, 3.0, 1.0, 0.1, key="s_height")
+    with c3:
+        st.empty()
 
     st.write("") # spacer
     st.markdown("**Cost assumptions**")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     with c1:
         bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
     with c2:
         discount_rate = st.number_input("Equity discount rate (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
+    with c3:
+        st.empty()
 
     st.write("") # spacer
     st.markdown("**Revenue & financing**")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     with c1:
         ppa_tariff = st.number_input("PPA tariff (per kWh)", 1.0, 10.0, 4.50, 0.25, key="s_ppa")
+        interest_rate = st.number_input("Interest rate (% p.a.)", 5.0, 20.0, 9.0, 0.5, key="s_int") / 100
     with c2:
         tariff_esc = st.number_input("PPA escalation (% p.a.)", 0.0, 5.0, 0.0, 0.1, key="s_esc") / 100
+        loan_tenure = st.slider("Loan tenure (years)", 5, 20, 15, key="s_tenure")
     with c3:
         debt_ratio = st.slider("Debt ratio", 0.5, 0.9, 0.70, 0.05, key="s_debt")
-    with c4:
-        interest_rate = st.number_input("Interest rate (% p.a.)", 5.0, 20.0, 9.0, 0.5, key="s_int") / 100
-    
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        loan_tenure = st.slider("Loan tenure (years)", 5, 20, 15, key="s_tenure")
 
     st.write("") # spacer
     st.markdown("**Model defaults**")
