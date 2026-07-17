@@ -667,7 +667,7 @@ elif step == 3:
     st.markdown("**Weather & site**")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws")
+        weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws", horizontal=True)
     with c2:
         ground_albedo = st.number_input("Ground albedo", 0.0, 0.9, 0.20, 0.05, key="s_albedo")
     with c3:
