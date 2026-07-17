@@ -666,9 +666,10 @@ elif step == 3:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**Cost assumptions**")
-        bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
-        discount_rate = st.number_input("Equity discount rate (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
+        st.markdown("**Weather & site**")
+        weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws")
+        ground_albedo = st.number_input("Ground albedo", 0.0, 0.9, 0.20, 0.05, key="s_albedo")
+        mounting_height_m = st.number_input("Mounting height (m)", 0.5, 3.0, 1.0, 0.1, key="s_height")
         
     with col2:
         st.markdown("**Revenue & financing**")
@@ -679,10 +680,9 @@ elif step == 3:
         loan_tenure = st.slider("Loan tenure (years)", 5, 20, 15, key="s_tenure")
 
         st.write("") # spacer
-        st.markdown("**Weather & site**")
-        weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws")
-        ground_albedo = st.number_input("Ground albedo", 0.0, 0.9, 0.20, 0.05, key="s_albedo")
-        mounting_height_m = st.number_input("Mounting height (m)", 0.5, 3.0, 1.0, 0.1, key="s_height")
+        st.markdown("**Cost assumptions**")
+        bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
+        discount_rate = st.number_input("Equity discount rate (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
 
     st.write("") # spacer
     st.markdown("**Model defaults**")
