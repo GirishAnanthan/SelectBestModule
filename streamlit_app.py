@@ -646,12 +646,15 @@ elif step == 1:
                         st.text(format_specs_for_display(specs))
 
                     # Editable fields — restore from existing if available
-                    eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(existing.get("efficiency_pct", specs.get("efficiency_pct",0) or 0) if existing else specs.get("efficiency_pct",0) or 0), key=f"eff_{i}")
-                    tc = st.number_input("TC Pmax (%/°C)", 0.0, 1.0, float(abs(existing.get("temp_coeff_pmax", specs.get("temp_coeff_pmax",0) or 0) if existing else specs.get("temp_coeff_pmax",0) or 0)), key=f"tc_{i}")
-                    deg_y1 = st.number_input("Y1 Degr. (%)", 0.0, 5.0, float(existing.get("deg_y1_pct", specs.get("deg_y1_pct",0) or 0) if existing else specs.get("deg_y1_pct",0) or 0), key=f"deg_y1_{i}")
-                    deg_ann = st.number_input("Ann. Degr. (%)", 0.0, 1.0, float(existing.get("deg_annual_pct", specs.get("deg_annual_pct",0) or 0) if existing else specs.get("deg_annual_pct",0) or 0), key=f"deg_ann_{i}")
-                    noct = st.number_input("NOCT (°C)", 0, 60, int(existing.get("noct", specs.get("noct",0) or 0) if existing else specs.get("noct",0) or 0), key=f"noct_{i}")
-                    pw = st.number_input("Warranty (yr)", 0, 40, int(existing.get("warranty_power", specs.get("warranty_power",0) or 0) if existing else specs.get("warranty_power",0) or 0), key=f"pw_{i}")
+                    pc1, pc2 = st.columns(2)
+                    with pc1:
+                        eff = st.number_input("Efficiency (%)", 0.0, 30.0, float(existing.get("efficiency_pct", specs.get("efficiency_pct",0) or 0) if existing else specs.get("efficiency_pct",0) or 0), key=f"eff_{i}")
+                        deg_y1 = st.number_input("Y1 Degr. (%)", 0.0, 5.0, float(existing.get("deg_y1_pct", specs.get("deg_y1_pct",0) or 0) if existing else specs.get("deg_y1_pct",0) or 0), key=f"deg_y1_{i}")
+                        noct = st.number_input("NOCT (°C)", 0, 60, int(existing.get("noct", specs.get("noct",0) or 0) if existing else specs.get("noct",0) or 0), key=f"noct_{i}")
+                    with pc2:
+                        tc = st.number_input("TC Pmax (%/°C)", 0.0, 1.0, float(abs(existing.get("temp_coeff_pmax", specs.get("temp_coeff_pmax",0) or 0) if existing else specs.get("temp_coeff_pmax",0) or 0)), key=f"tc_{i}")
+                        deg_ann = st.number_input("Ann. Degr. (%)", 0.0, 1.0, float(existing.get("deg_annual_pct", specs.get("deg_annual_pct",0) or 0) if existing else specs.get("deg_annual_pct",0) or 0), key=f"deg_ann_{i}")
+                        pw = st.number_input("Warranty (yr)", 0, 40, int(existing.get("warranty_power", specs.get("warranty_power",0) or 0) if existing else specs.get("warranty_power",0) or 0), key=f"pw_{i}")
 
                     specs.update(efficiency_pct=eff, temp_coeff_pmax=-tc, deg_y1_pct=deg_y1, deg_annual_pct=deg_ann, noct=noct, warranty_power=pw)
                     st.caption(f"Extracted via {specs.get('_extraction_method','N/A')}")
