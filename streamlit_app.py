@@ -539,11 +539,6 @@ DEFAULT_TECHS = ["Mono PERC", "N-TOPCon", "HJT", "Mono PERC", "Poly PERC"]
 # ======================================================================
 if step == 0:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    section_heading(
-        "01 - PROJECT BRIEF",
-        "Frame the solar asset.",
-        "These inputs anchor energy-yield assumptions and scale commercial comparison.",
-    )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -567,11 +562,6 @@ if step == 0:
 # ======================================================================
 elif step == 1:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    section_heading(
-        "02 - CANDIDATE MODULES",
-        "Bring the contenders.",
-        "Upload PDF datasheets; specs are auto-extracted and editable below.",
-    )
 
     # Restore n_modules from session state if available
     saved_n = st.session_state.get("module_specs_list", [])
@@ -697,11 +687,6 @@ elif step == 1:
 # ======================================================================
 elif step == 2:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    section_heading(
-        "03 - DECISION PRIORITIES",
-        "Weight what matters.",
-        "Weights directly drive the composite ranking. They are normalised automatically.",
-    )
 
     default_w = get_default_weights()
     c1, c2 = st.columns(2)
@@ -724,11 +709,6 @@ elif step == 2:
 # ======================================================================
 elif step == 3:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    section_heading(
-        "04 - ECONOMIC CASE",
-        "Model the investment.",
-        "Enter costs, tariff and financing terms.",
-    )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -765,11 +745,6 @@ elif step == 3:
 # ======================================================================
 elif step == 4:
     st.markdown('<div class="step-panel">', unsafe_allow_html=True)
-    section_heading(
-        "05 - STATUTORY COMPLIANCES",
-        "Track approvals.",
-        "Capture status and timelines for all statutory clearances required for a ground-mount solar plant.",
-    )
 
     STATUTORY_APPROVALS = [
         ("Environmental Clearance (EC)", "MoEFCC / SEIAA", 90),
