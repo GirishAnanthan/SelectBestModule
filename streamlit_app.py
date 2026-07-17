@@ -729,6 +729,10 @@ elif step == 3:
         weather_source = st.radio("Data source", ["NASA POWER API", "PVGIS TMY API", "Simplified Estimate"], index=0, key="s_ws")
         ground_albedo = st.number_input("Ground albedo", 0.0, 0.9, 0.20, 0.05, key="s_albedo")
         mounting_height_m = st.number_input("Mounting height (m)", 0.5, 3.0, 1.0, 0.1, key="s_height")
+        st.write("") # spacer
+        st.markdown("**Cost assumptions**")
+        bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
+        discount_rate = st.number_input("Equity discount rate (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
     with col2:
         st.markdown("**Revenue & financing**")
         ppa_tariff = st.number_input("PPA tariff (per kWh)", 1.0, 10.0, 4.50, 0.25, key="s_ppa")
@@ -737,14 +741,9 @@ elif step == 3:
         interest_rate = st.number_input("Interest rate (% p.a.)", 5.0, 20.0, 9.0, 0.5, key="s_int") / 100
         loan_tenure = st.slider("Loan tenure (years)", 5, 20, 15, key="s_tenure")
 
-    col3, col4 = st.columns(2)
-    with col3:
-        st.markdown("**Cost assumptions**")
-        bos_cost = st.number_input("BoS, EPC & Land (per Wp)", 5.0, 30.0, 12.0, 0.5, key="s_bos")
-        discount_rate = st.number_input("Equity discount rate (%)", 5.0, 20.0, 10.0, 0.5, key="s_dr") / 100
-    with col4:
-        st.markdown("**Model defaults**")
-        st.caption("25-year operating life · 0.55% annual degradation · 2.0% O&M of base cost")
+    st.write("") # spacer
+    st.markdown("**Model defaults**")
+    st.caption("25-year operating life · 0.55% annual degradation · 2.0% O&M of base cost")
 
     currency_option = st.session_state.get("s_cur", currency_options()[0])
     cur = get_currency(code_from_option(currency_option))
