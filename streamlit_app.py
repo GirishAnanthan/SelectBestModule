@@ -509,9 +509,11 @@ step = st.session_state.step
 st.markdown(f"""
 <div class="section-heading" style="padding: 1rem 1.5rem; background: {t['bg']}; border-bottom: 1px solid {t['border']}; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
     <div>
-        <div class="section-eyebrow">{tr_html(STEP_EYEBROWS[step])}</div>
-        <h2>{tr_html(STEP_TITLES[step])}</h2>
-        <p style="margin-bottom:0;">{tr_html(STEP_DESCS[step])}</p>
+        <div style="display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap;">
+            <div class="section-eyebrow" style="margin-bottom: 0;">{tr_html(STEP_EYEBROWS[step])}</div>
+            <h2 style="margin: 0;">{tr_html(STEP_TITLES[step])}</h2>
+        </div>
+        <p style="margin: 0.3rem 0 0 0;">{tr_html(STEP_DESCS[step])}</p>
     </div>
     <div style="font-family: 'DM Mono', monospace; font-size: 0.7rem; color: {t['muted']}; margin-top: 0.5rem;">{step+1} / 6</div>
 </div>
