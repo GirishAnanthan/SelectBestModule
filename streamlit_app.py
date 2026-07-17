@@ -337,13 +337,21 @@ label, div[data-testid="stMarkdownContainer"], div[data-testid="stWidgetLabel"] 
 STEP_NAMES = ["Project", "Modules", "Priorities", "Finance", "Compliances", "Report"]
 STEP_EYEBROWS = ["01 / PROJECT BRIEF", "02 / CANDIDATE MODULES", "03 / DECISION PRIORITIES",
                  "04 / ECONOMIC CASE", "05 / STATUTORY COMPLIANCES", "06 / ANALYSIS"]
+STEP_TITLES = [
+    "Frame the solar asset.",
+    "Bring the contenders.",
+    "Weight what matters.",
+    "Model the investment.",
+    "Track approvals.",
+    "Compare the results."
+]
 STEP_DESCS = [
-    "Frame the solar asset — location, scale, and site conditions anchor every calculation.",
+    "These inputs anchor energy-yield assumptions and scale commercial comparison.",
     "Upload PDF datasheets; specs are auto-extracted and editable below.",
-    "Weight what matters. Weights are normalised automatically.",
-    "Set costs, tariff, and financing structure.",
-    "Track statutory approvals and environmental clearances.",
-    "",
+    "Weights directly drive the composite ranking. They are normalised automatically.",
+    "Enter costs, tariff and financing terms.",
+    "Capture status and timelines for all statutory clearances required for a ground-mount solar plant.",
+    "Final comparative analysis based on weighted criteria and financials."
 ]
 PCT = lambda s: int((s+1)/6*100)
 
@@ -499,11 +507,13 @@ with st.sidebar:
 # step nav — simple label
 step = st.session_state.step
 st.markdown(f"""
-<div class="step-nav">
+<div class="section-heading" style="padding: 1rem 1.5rem; background: {t['bg']}; border-bottom: 1px solid {t['border']}; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
     <div>
-        <span class="step-label">{tr_html(STEP_EYEBROWS[step])}</span>
-        <span class="step-desc">{tr_html(STEP_DESCS[step])}</span>
+        <div class="section-eyebrow">{tr_html(STEP_EYEBROWS[step])}</div>
+        <h2>{tr_html(STEP_TITLES[step])}</h2>
+        <p style="margin-bottom:0;">{tr_html(STEP_DESCS[step])}</p>
     </div>
+    <div style="font-family: 'DM Mono', monospace; font-size: 0.7rem; color: {t['muted']}; margin-top: 0.5rem;">{step+1} / 6</div>
 </div>
 """, unsafe_allow_html=True)
 
