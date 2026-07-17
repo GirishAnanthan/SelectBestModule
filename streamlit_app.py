@@ -442,6 +442,17 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ======================================================================
+# WIZARD NAVIGATION — Previous | Next
+# ======================================================================
+nav_c1, nav_mid, nav_c2 = st.columns([1, 2, 1])
+with nav_c1:
+    if step > 0:
+        st.button("← Previous", key="prev_btn", type="secondary", on_click=_go_back, use_container_width=True)
+with nav_c2:
+    if step < 5:
+        st.button("Next →", key="next_btn", on_click=_go_forward, use_container_width=True)
+
 # ---------------------------------------------------------------------------
 # IMPORTS FOR CACHED HELPERS
 # ---------------------------------------------------------------------------
@@ -1229,17 +1240,6 @@ elif step == 5:
         st.info("Your analysis results are still available. Try refreshing the page or going back to edit inputs.")
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-# ======================================================================
-# WIZARD NAVIGATION — Previous | Next (runs after all step content)
-# ======================================================================
-nav_c1, nav_mid, nav_c2 = st.columns([1, 2, 1])
-with nav_c1:
-    if step > 0:
-        st.button("← Previous", key="prev_btn", type="secondary", on_click=_go_back, use_container_width=True)
-with nav_c2:
-    if step < 5:
-        st.button("Next →", key="next_btn", on_click=_go_forward, use_container_width=True)
 
 # Footer with theme switcher
 footer_html = f"""<div style="text-align:center;padding:1.2rem;font-size:0.6rem;color:{t['dim']};font-family:DM Mono,monospace;border-top:1px solid {t['border']}">
