@@ -759,11 +759,11 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
     # ----- Temperature Coefficients -----
     # Pmax
     tc_patterns = [
-        r"Temperature\s*Co[-\s]*efficient\s*(?:of\s*)?P(?:max|mpp?)\s*(?:\(γ|\(Pmax|\(P\).*?)?[:\s]*[-\u2212]?(\d+\.?\d*)",
-        r"Pmax\s*Temperature\s*Co[-\s]*efficient[:\s]*[-\u2212]?(\d+\.?\d*)",
+        r"Temperature\s*Co[a-z\-]*cient\s*(?:of\s*)?P(?:max|mpp?)\s*(?:\(γ|\(Pmax|\(P\).*?)?[:\s]*[-\u2212]?(\d+\.?\d*)",
+        r"Pmax\s*Temp(?:erature|\.)?\s*Co[a-z\-]*cient.*?[\-\u2212](\d+\.?\d*)",
         r"γ.*?[-\u2212](\d+\.?\d*)",
-        r"Power\s*Temp(?:erature)?\s*Coeff?\.?\s*[:\s]*[-\u2212](\d+\.?\d*)",
-        r"Coefficient\s*of\s*Pmax\s*[:\s]*[-\u2212](\d+\.?\d*)",
+        r"Power\s*Temp(?:erature|\.)?\s*Co[a-z\-]*cient\.?\s*[:\s]*[-\u2212]?(\d+\.?\d*)",
+        r"Co[a-z\-]*cient\s*of\s*Pmax\s*[:\s]*[-\u2212]?(\d+\.?\d*)",
     ]
     for pat in tc_patterns:
         m = re.search(pat, text, re.IGNORECASE)
@@ -782,7 +782,7 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
 
     # Voc temp coefficient
     voc_tc = re.search(
-        r"(?:Temp.*Voc|Voc.*Temp|Temperature.*Voc).*?[-\u2212](\d+\.\d+)",
+        r"(?:Voc\s*Temp.*Co[a-z\-]*cient|Temp.*Voc|Voc.*Temp|Temperature.*Voc).*?[\-\u2212](\d+\.\d+)",
         text, re.IGNORECASE
     )
     if voc_tc:
@@ -790,16 +790,42 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
 
     # Isc temp coefficient
     isc_tc = re.search(
-        r"(?:Temp.*Isc|Isc.*Temp|Temperature.*Isc).*?[+\-](\d+\.?\d*)",
+        r"(?:Isc\s*Temp.*Co[a-z\-]*cient|Temp.*Isc|Isc.*Temp|Temperature.*Isc).*?[+\-]?(\d+\.?\d*)",
         text, re.IGNORECASE
     )
     if isc_tc:
         specs["temp_coeff_isc"] = float(isc_tc.group(1))
 
     # ----- NOCT -----
-    noct_m = re.search(r"NOCT\s*[:\(]?\s*(\d{2})\s*[°±℃]", text, re.IGNORECASE)
+    noct_m = re.search(r"(?:NOCT|NMOT|Nominal\s*Operating\s*Cell\s*Temp.*?)\s*[:\(\s]*(\d{2})\s*[°±℃]", text, re.IGNORECASE)
     if noct_m:
         specs["noct"] = int(noct_m.group(1))
+    else:
+        # Fallback: look for 41-47 ± 2
+        noct_alt = re.search(r"\b(4[1-7])\s*[±\+]\s*[1-3]\b", text)
+        if noct_alt:
+            specs["noct"] = int(noct_alt.group(1))
+
+    # ----- Disconnected Temperature Coefficients Fallback -----
+    if "temp_coeff_pmax" not in specs or "temp_coeff_voc" not in specs:
+        neg_floats = []
+        for m in re.finditer(r"[-\u2212]\s*0\.[1-5]\d+", text):
+            try:
+                val = float(m.group(0).replace(" ", "").replace("\u2212", "-"))
+                neg_floats.append(val)
+            except:
+                pass
+        if len(set(neg_floats)) >= 2:
+            neg_floats = sorted(list(set(neg_floats)))
+            if "temp_coeff_pmax" not in specs:
+                specs["temp_coeff_pmax"] = neg_floats[0]  # Pmax is typically more negative (e.g. -0.32)
+            if "temp_coeff_voc" not in specs:
+                specs["temp_coeff_voc"] = neg_floats[1]  # Voc is typically less negative (e.g. -0.26)
+
+    if "temp_coeff_isc" not in specs:
+        isc_m = re.search(r"\b(0\.0\d{2,3})\b", text)
+        if isc_m:
+            specs["temp_coeff_isc"] = float(isc_m.group(1))
 
     # ----- Warranty -----
     prod_w = re.search(
@@ -846,8 +872,8 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
                 specs["deg_annual_pct"] = v
 
     # ----- Dimensions -----
-    # Try standard mm × mm × mm pattern (4-digit × 4-digit × 2-3-digit)
-    dim_m = re.search(r"(\d{4})\s*[xX×*]\s*(\d{3,4})\s*[xX×*]\s*(\d{2,3})", text)
+    # Try standard mm × mm × mm pattern with optional tolerances (e.g., 2382 (±2mm) X ...)
+    dim_m = re.search(r"(\d{4})\s*(?:\([^)]*\))?\s*[xX×*]\s*(\d{3,4})\s*(?:\([^)]*\))?\s*[xX×*]\s*(\d{2,3})", text)
     if dim_m:
         specs["dimensions"] = f"{dim_m.group(1)}x{dim_m.group(2)}x{dim_m.group(3)}"
         specs["length_mm"] = int(dim_m.group(1))
@@ -868,7 +894,7 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
     # ----- Manufacturer -----
     mfr = ""
     # 1. Domain name
-    dm = re.search(r"(?:www\.)?([A-Za-z]+)\.(?:com|co\.in|in)\b", text)
+    dm = re.search(r"(?:www\.)?([A-Za-z0-9-]+)\.(?:com|net|co\.in|in|org)\b", text)
     if dm:
         candidate = dm.group(1)
         if len(candidate) >= 4:
@@ -876,7 +902,7 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
     # 2. Company suffix — match "Name Power/Solar/Energy" patterns
     if not mfr:
         _tech_words = re.compile(
-            r"TOPCon|PERC|HJT|Bifacial|Half.?Cut|Maximum|Nominal|"
+            r"TOPCon|PERC|HJT|Bifacial|Half.?Cut|Maximum|Nominal|Positive|"
             r"Mechanical|Electrical|Backside|Generated|Optimum|Operating|"
             r"Linear|Module|Split|Junction|Frame|Cover|Weight|Design|Scan|"
             r"Product|Years|Warranty|Certificate|Advanced|Enlisted|First|Annual|"
