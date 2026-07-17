@@ -951,19 +951,101 @@ def parse_specs(text, technology_hint=None, selected_wp=None):
     return specs
 
 
+def parse_pan_specs(text):
+    """
+    Parse a PVsyst PAN file format into our specs format.
+    """
+    specs = {}
+    
+    # Common mappings from PAN keys to our schema keys
+    key_mapping = {
+        "PNom": ("power_wp", float),
+        "Vmpp": ("vmp", float),
+        "Impp": ("imp", float),
+        "Voc": ("voc", float),
+        "Isc": ("isc", float),
+        "muPmpp": ("temp_coeff_pmax", float),
+        "muVoc": ("temp_coeff_voc", float),
+        "muIsc": ("temp_coeff_isc", float),
+        "Length": ("length_mm", float),
+        "Width": ("width_mm", float),
+        "Depth": ("thickness_mm", float),
+        "Weight": ("weight_kg", float),
+        "NCelS": ("cell_count", int),
+        "Manufacturer": ("manufacturer", str),
+        "Model": ("model", str),
+        "Bifacial": ("bifacial", lambda x: bool(int(x)) if x.isdigit() else x.lower() == 'true')
+    }
+    
+    lines = text.splitlines()
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('[') or '=' not in line:
+            continue
+        key, val = line.split('=', 1)
+        key = key.strip()
+        val = val.strip()
+        
+        if key in key_mapping:
+            target_key, converter = key_mapping[key]
+            try:
+                specs[target_key] = converter(val)
+            except Exception:
+                pass
+                
+    if "power_wp" in specs:
+        specs["power_wp"] = int(specs["power_wp"])
+        specs["power_options"] = [specs["power_wp"]]
+        
+    if "length_mm" in specs and "width_mm" in specs and "thickness_mm" in specs:
+        specs["dimensions"] = f"{int(specs['length_mm'])}x{int(specs['width_mm'])}x{int(specs['thickness_mm'])}"
+        
+    # PAN files usually specify efficiency based on Area
+    if "power_wp" in specs and "length_mm" in specs and "width_mm" in specs:
+        area = (specs["length_mm"] / 1000.0) * (specs["width_mm"] / 1000.0)
+        if area > 0:
+            specs["efficiency_pct"] = (specs["power_wp"] / (area * 1000.0)) * 100.0
+            
+    # Default values for fields not in standard PAN
+    if "noct" not in specs: specs["noct"] = 43
+    if "deg_y1_pct" not in specs: specs["deg_y1_pct"] = 2.0
+    if "deg_annual_pct" not in specs: specs["deg_annual_pct"] = 0.55
+    if "warranty_power" not in specs: specs["warranty_power"] = 25
+    if "warranty_product" not in specs: specs["warranty_product"] = 12
+
+    return specs
+
+
 # ---------------------------------------------------------------------------
 # High-level entry points
 # ---------------------------------------------------------------------------
 
-def extract_module_specs(pdf_bytes, technology_hint=None, selected_wp=None):
-    """Extract text from PDF, parse specs, return structured data dict."""
+def extract_module_specs(file_bytes, technology_hint=None, selected_wp=None, filename=""):
+    """Extract text from PDF or PAN file, parse specs, return structured data dict."""
     try:
-        text, method = extract_text_from_pdf(pdf_bytes)
-        specs = parse_specs(text, technology_hint, selected_wp=selected_wp)
-        specs["_extraction_method"] = method
-        specs["_raw_text_length"] = len(text)
+        is_pan = filename.lower().endswith('.pan')
+        
+        # If it's a PAN file, it's just a text file.
+        if is_pan:
+            text = file_bytes.decode('utf-8', errors='ignore')
+            specs = parse_pan_specs(text)
+            specs["_extraction_method"] = "pan"
+            specs["_raw_text_length"] = len(text)
+            if "technology" not in specs:
+                specs["technology"] = technology_hint or "Mono PERC"
+        else:
+            text, method = extract_text_from_pdf(file_bytes)
+            # If the file looks like a PAN file inside (e.g. PVObject_), handle it as such.
+            if "PVObject_" in text or "PNom=" in text:
+                specs = parse_pan_specs(text)
+                specs["_extraction_method"] = "pan"
+                specs["_raw_text_length"] = len(text)
+            else:
+                specs = parse_specs(text, technology_hint, selected_wp=selected_wp)
+                specs["_extraction_method"] = method
+                specs["_raw_text_length"] = len(text)
     except Exception as e:
-        logger.warning("PDF parsing failed: %s", e)
+        logger.warning("File parsing failed: %s", e)
         specs = {
             "power_options": [],
             "power_wp": None,

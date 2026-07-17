@@ -496,12 +496,12 @@ st.markdown(f"""
 # IMPORTS FOR CACHED HELPERS
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def cached_parse(pdf_bytes, default_tech, _version=5):
-    return extract_module_specs(pdf_bytes, default_tech)
+def cached_parse(pdf_bytes, default_tech, filename="", _version=6):
+    return extract_module_specs(pdf_bytes, default_tech, filename=filename)
 
 @st.cache_data(show_spinner=False)
-def cached_parse_wp(pdf_bytes, default_tech, selected_wp, _version=5):
-    return extract_module_specs(pdf_bytes, default_tech, selected_wp=selected_wp)
+def cached_parse_wp(pdf_bytes, default_tech, selected_wp, filename="", _version=6):
+    return extract_module_specs(pdf_bytes, default_tech, selected_wp=selected_wp, filename=filename)
 
 @st.cache_data(show_spinner=False)
 def cached_extract_text(pdf_bytes):
@@ -583,8 +583,12 @@ elif step == 1:
 
         with cols[i]:
             header_ph = st.empty()
-
-            uploaded = st.file_uploader(f"Datasheet (PDF)", type=["pdf"], key=f"upload_{i}", label_visibility="collapsed")
+            
+            file_type = st.radio("Upload format", ["Datasheet", "PAN file"], key=f"file_type_{i}", horizontal=True, label_visibility="collapsed")
+            if file_type == "Datasheet":
+                uploaded = st.file_uploader(f"Datasheet (PDF)", type=["pdf"], key=f"upload_{i}", label_visibility="collapsed")
+            else:
+                uploaded = st.file_uploader(f"PAN file (.pan)", type=["pan"], key=f"upload_pan_{i}", label_visibility="collapsed")
 
             # If new file uploaded, store bytes and filename
             if uploaded is not None:
@@ -609,7 +613,7 @@ elif step == 1:
                 else:
                     # Parse fresh
                     try:
-                        specs = cached_parse(pdf_bytes, default_tech)
+                        specs = cached_parse(pdf_bytes, default_tech, filename=prev_filenames.get(i, ""))
                     except Exception as e:
                         _log_app_error("pdf_parse", e, {"module_index": i, "filename": prev_filenames.get(i, "")})
                         st.error(f"Parse failed: {e}")
@@ -624,7 +628,7 @@ elif step == 1:
                         prev_wp = existing.get("power_wp") if existing else None
                         wp_index = opts.index(prev_wp) if prev_wp in opts else min(mid_idx+1, len(opts)-1)
                         selected_wp = st.selectbox("Wp", options=opts, index=wp_index, key=f"wp_{i}", label_visibility="collapsed")
-                        specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp))
+                        specs = cached_parse_wp(pdf_bytes, default_tech, int(selected_wp), filename=prev_filenames.get(i, ""))
                         specs["power_wp"] = int(selected_wp)
                     elif specs:
                         prev_wp_val = int(existing.get("power_wp", 600)) if existing else 600
