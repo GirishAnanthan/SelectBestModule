@@ -241,7 +241,7 @@ except Exception:
     st.session_state.step = 0
 
 if "theme" not in st.session_state:
-    st.session_state.theme = ""
+    st.session_state.theme = "Midnight Ocean"
 if "report_generated" not in st.session_state:
     st.session_state.report_generated = False
 if "inputs_dirty" not in st.session_state:
@@ -365,69 +365,6 @@ def _go_back():
 def _go_forward():
     st.session_state.step = st.session_state.step + 1
     st.session_state.inputs_dirty = True
-
-# ---------------------------------------------------------------------------
-# THEME SELECTION SCREEN (shown on first visit)
-# ---------------------------------------------------------------------------
-if not st.session_state.theme:
-    st.markdown("<div style='height:25px'></div>", unsafe_allow_html=True)
-    startup_language = st.selectbox(
-        "World Languages",
-        language_options(),
-        index=_language_index(),
-        key="startup_language",
-        format_func=str,
-    )
-    _apply_language_option(startup_language)
-    st.caption("Choose your language first, then choose a theme. You can change both later from Settings.")
-
-    st.markdown(f"""
-<div class="solarpro-header" style="background:{THEMES['Midnight Ocean']['bg']}">
-    <div class="solarpro-brand" style="color:{THEMES['Midnight Ocean']['text']}">
-        <span class="sun-mark" style="color:{THEMES['Midnight Ocean']['accent']}">&#9728;</span>
-        <span>SOLAR<span style="color:{THEMES['Midnight Ocean']['link']}">PRO</span></span>
-    </div>
-    <div class="solarpro-tag" style="color:{THEMES['Midnight Ocean']['muted']}">{tr_html('THEME SETUP')}</div>
-</div>
-""", unsafe_allow_html=True)
-
-    st.markdown(f"""
-<div style="padding:1.5rem;background:{THEMES['Midnight Ocean']['bg']}">
-    <div style="font-family:'Playfair Display',serif;font-size:1.6rem;color:{THEMES['Midnight Ocean']['heading']}">{tr_html('Choose Your Theme')}</div>
-    <p style="font-size:0.85rem;color:{THEMES['Midnight Ocean']['muted']};margin:0.3rem 0 1.5rem">
-        {tr_html('Select a visual theme for SolarPro. You can change this later from Settings.')}
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-    # Theme grid - 4 columns
-    theme_names = list(THEMES.keys())
-    for row_start in range(0, len(theme_names), 4):
-        cols = st.columns(4)
-        for idx, col in enumerate(cols):
-            t_idx = row_start + idx
-            if t_idx >= len(theme_names):
-                break
-            name = theme_names[t_idx]
-            t = THEMES[name]
-            with col:
-                st.markdown(f"""
-<div style="background:{t['card']};border:1px solid {t['border']};border-radius:10px;padding:0.8rem;min-height:130px">
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-        <div style="width:18px;height:18px;border-radius:50%;background:{t['accent']}"></div>
-        <div style="width:18px;height:18px;border-radius:50%;background:{t['accent2']}"></div>
-        <div style="width:18px;height:18px;border-radius:50%;background:{t['text_muted'] if 'text_muted' in t else t['muted']}"></div>
-        <div style="width:18px;height:18px;border-radius:50%;background:{t['dim']}"></div>
-    </div>
-    <div style="font-size:0.75rem;font-weight:600;color:{t['text']};font-family:Manrope,sans-serif">{name}</div>
-    <div style="font-size:0.55rem;color:{t['muted']};margin-top:2px;font-family:DM Mono,monospace">{t['bg']}</div>
-</div>
-""", unsafe_allow_html=True)
-                if st.button(f"Select {name}", key=f"theme_{name}", use_container_width=True):
-                    st.session_state.theme = name
-                    st.rerun()
-
-    st.stop()
 
 # ---------------------------------------------------------------------------
 # HEADER (only shown after theme is selected)
