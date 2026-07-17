@@ -172,7 +172,7 @@ section.main > div {{ padding-top: 0; max-width: 1200px; margin: 0 auto; }}
 div[data-baseweb="select"] > div {{ background: #ffffff !important; border: 1px solid {t['border']} !important; border-radius: 6px !important; font-family: 'Manrope',sans-serif !important; font-size: 0.8rem !important; min-height: 2.2rem !important; }}
 div[data-baseweb="select"] * {{ color: #000000 !important; }}
 .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus, div[data-baseweb="select"] > div:focus-within {{ border-color: {t['accent']} !important; box-shadow: 0 0 0 1px {t['accent']} !important; }}
-div[data-baseweb="popover"], div[role="listbox"], div[role="option"] {{ background: #ffffff !important; color: #000000 !important; }}
+div[data-baseweb="popover"], div[role="listbox"], div[role="option"], div[data-baseweb="popover"] * {{ background: #ffffff !important; color: #000000 !important; }}
 label {{ color: {t['text']} !important; font-size: 0.75rem !important; font-weight: 500 !important; }}
 .stRadio>div {{ flex-direction: row !important; gap: 0.4rem !important; }}
 .stRadio>div label {{ background: {t['card']} !important; padding: 0.2rem 0.7rem !important; border-radius: 5px !important; border: 1px solid {t['border']} !important; font-size: 0.7rem !important; color: {t['text']} !important; }}
