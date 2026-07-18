@@ -1,0 +1,310 @@
+Standard Panel Future Solar Panel
+GRADE A
+Cells Guaranteed
+0~+4.99 W
+Positive Power
+Tolerance
+635 Wp
+Maximum Power
+Output Maximum Eciency
+23.51%
+N-type TOPCon
+132 Half-Cut TOPCon Cell 
+Bifacial Dual Glass
+Model No: FST-G12R.132G-XXX
+(where XXX = 600-635)
+LINEAR PERFORMANCE WARRANTY
+Year Degradation < 1% st
+1
+2-30th Year Degradation < 0.4% p.a.
+Product Warranty*
+12
+YEARS
+Linear Performance Warranty*
+30
+YEARS
+TM
+G12R Cells
+16BB Residential
+Commercial &
+Industrial 
+BIS | IEC 61730 | IEC 61215 | UL 61730 | IEC 61701 (salt mist) | IEC 62716 (Ammonia)
+IEC 61853-1 & 2 (PAN File) | LeTID | IEC 60068 (sand & dust) | IEC 62804 (PID) | CEC | CE
+FS Green Energies Pvt. Ltd.
+For more details, please contact:
+Corporate Oce:
+Samanvay House, Beside Urmi Society, 
+Nr. Alkapuri Haveli, Jetalpur Road,
+Alkapuri, Vadodara - 390 007, Gujarat. 
+inquiries@futuresolar.net 
+* T&C Apply
+Utility
+73531 61333 www.futuresolar.net
+Certifications (Under process)
+ManufacturingUnit:
+Survey No 160, Karjan Sadhli Road, 
+Juni Jithardi Village, Karjan - 391 240 
+Gujarat.
+Lower Degradation
+Outstanding Power
+Generation
+Lower Temperature
+Coecient
+Less Hot Spot
+Shading Eects 
+Enhanced Bifacial
+Factor
+Exceptional Mechanical
+Resistance
+PID Free/Low LID
+Protection
+FREE
+Bifacility Factor : 80 ± 10 % 
+Higher Eciency
+SOLAR PV MODULE
+Half-Cut TOPCon CELL
+Bifacial Dual Glass 600-635 Wp
+Max. Power (P max)
+Max. Power (P max)
+Max. Power (P max)
+Max. Power (P max)
+* Bifacial Gain :The additional gain from the backside compared to the power of the front side at STC, It depends on mounting structure, Height, angle, Ground surface etc.
+Gain FST-G12R.132G-XXX
+5%
+10%
+20%
+30%
+ELECTRICAL CHARACTERISTICS (STC)
+Maximum Power, P Max (Wp)
+Maximum Voltage, Vmp (V)
+Maximum Current, Imp (A)
+Open Circuit Voltage, Voc (V)
+Short Circuit Current, Isc (A)
+Module Eciency (%)
+Fill Factor (%)
+Power Tolerence
+Maximum System Voltage
+Maximum Series Fuse Rating
+605
+40.46
+14.95
+48.3
+15.61
+22.39%
+80.22%
+610
+40.55
+15.04
+48.6
+15.65
+22.58%
+80.19%
+615
+40.70
+15.13
+48.9
+15.69
+22.75%
+80.15%
+620
+40.70
+15.22
+49.2
+15.73
+22.95%
+80.11%
+625
+40.81
+15.31
+49.5
+15.77
+23.13%
+80.04%
+630
+40.93
+15.4
+49.8
+15.81
+23.33%
+80.05%
+0 to +4.99 W 
+1500 V (IEC& UL) 
+30 A 
+2
+* STC- Irradiance = 1000 W/m , Module Temperature = 25 °C and AM = 1.5 Measuring Tolerance = ±3%
+FST-G12R.132G-XXX 600 605 610 615 620 625 630
+600
+40.42
+14.84
+48
+15.57
+22.20%
+80.25%
+605 610
+ELECTRICAL CHARACTERISTICS (NOCT)
+Maximum Power (W)
+Maximum Voltage, Vmp (V)
+Maximum Current, Imp (A)
+Open Circuit Voltage, Voc (V)
+Short Circuit Current, Isc (A)
+445
+37.54
+11.85
+45.13
+12.44
+449
+37.63
+11.92
+45.41
+12.48
+452
+37.77
+11.98
+45.69
+12.51
+456
+37.77
+12.08
+45.97
+12.54
+460
+37.87
+12.14
+46.25
+12.57
+600
+441
+37.50
+11.76
+44.85
+12.41
+2
+* NOCT - Irradiance = 800 W/m , AM = 1.5, Ambient Temperature = 20° C, Wind Speed = 1 m/s, Measuring Tolerance = ±3%
+464
+37.98
+12.21
+46.53
+12.60
+635.06
+665.30
+725.78
+786.27
+640.39
+670.88
+731.87
+792.86
+645.75
+676.50
+738.00
+799.50
+651.00
+682.00
+744.00
+806.00
+656.08
+687.33
+749.81
+812.29
+629.78
+659.77
+719.75
+779.73
+661.81
+693.33
+756.36
+819.39
+External Dimensions
+Weight
+Solar Cells
+Front Glass
+Rear Cover
+Frame
+Junction Box
+Connector
+Mechanical Load
+Output Cable
+2382 (±2mm) X 1134 (±2mm) X 30 (±1mm) 
+33.5 Kg. 
+16 BB, TopCon, 105 mm X 182 mm 
+2.0 mm ARC Heat Strengthened Glass 
+2.0 mm Heat Strengthened Glass 
+Anodized Aluminium Alloy (Silver) 
+3 Split, IP 68 Rated 
+MC4 Connector 
+5400 Pa for Snow load, 2400 Pa for Wind Load 
+2
+4.0 mm /400 mm Long (Length can be customized) 
+MECHANICAL SPECIFICATIONS
+Container
+Pieces per Pallet
+Pallet per Container
+Pieces per Container 
+40' HQ
+36
+20
+720
+PACKING CONFIGURATION
+All Dimensions are in mm
+TEMPERATURE CHARACTERISTICS
+ -0.32
+ -0.26
+0.046
+-40 to + 85
+45±2
+Pmax Temp. Coecient (%/°C)
+Voc Temp. Coecient (%/°C)
+Isc Temp. Coecient (%/°C)
+Operating Temp. (°C) 
+Nominal Operating Cell Temp. (°C) 
+635.03 w
+508.02 w
+381.02 w
+254.01 w
+127.00 w
+2
+Incident Irrad = 1000 W/m
+2
+Incident Irrad = 800 W/m
+2
+Incident Irrad = 600 W/m
+2
+Incident Irrad = 400 W/m
+2
+Incident Irrad = 200 W/m
+16 Cell temp. = 25°C
+14
+12
+10
+8
+6
+4
+2
+0
+10 20 30 40 50
+Current (A)
+Voltage (V)
+60
+635
+40.99
+15.49
+50.1
+15.84
+23.51%
+80.01%
+635
+467
+38.04
+12.28
+46.81
+12.63
+666.70
+698.45
+761.95
+825.44
+The specification and key features contained in this datasheet may deviate slightly from our actual products due to the on-going innovation and product enhancement, 
+Future Solar reserves the right to make necessary adjustment to the information described herein at any time without further notice.
+* T&C Apply
+TM
+615 620 625 630 635
+600 605 610 615 620 625 630 635
+FST-G12R.132G-XXX
