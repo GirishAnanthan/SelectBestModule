@@ -203,7 +203,39 @@ div[data-testid="stForm"] > div > div {{ gap: 0.5rem !important; }}
 div[data-testid="stElementContainer"] {{ margin-bottom: 0 !important; }}
 .stMarkdown {{ margin-bottom: -0.2rem !important; }}
 
-@media (max-width:768px){{ .form-grid, .form-grid.three {{ grid-template-columns: 1fr; }} }}
+/* Responsive adjustments for Mobile, Tablet, PC */
+@media (max-width: 992px) {{
+    /* Header adjustments */
+    .solarpro-header, .step-nav {{ 
+        flex-direction: column !important; 
+        align-items: flex-start !important; 
+        gap: 0.5rem; 
+        padding: 1rem !important; 
+    }}
+    
+    /* Force columns to wrap for better viewing on small screens */
+    div[data-testid="stHorizontalBlock"] {{
+        flex-wrap: wrap !important;
+        gap: 1rem !important;
+    }}
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
+        min-width: min(100%, 250px) !important;
+        flex-grow: 1 !important;
+    }}
+}}
+
+@media (max-width: 768px) {{
+    /* Layout adjustments for very small screens */
+    .block-container {{ padding: 1rem !important; }}
+    .step-panel {{ padding: 1rem !important; }}
+    .wiz-actions {{ flex-direction: column; gap: 1rem; }}
+    
+    /* Ensure columns stack completely on mobile */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
+        min-width: 100% !important;
+    }}
+}}
+
 footer {{ display: none; }}
 </style>
 """
@@ -754,51 +786,43 @@ elif step == 4:
         st.session_state.inputs_dirty = True
         st.rerun()
 
-    # Display as editable table
-    comp_headers = ["Statutory Approval", "Issuing Authority", "Approx. Days", "Expected Days", "Status", "Delete"]
+    # Display as editable cards instead of a rigid table to be responsive
     col_widths = [3.0, 2.0, 1.0, 1.0, 1.3, 0.7]
-
-    # Use columns for header
-    h1, h2, h3, h4, h5, h6 = st.columns(col_widths)
-    with h1: st.markdown(f"**{comp_headers[0]}**")
-    with h2: st.markdown(f"**{comp_headers[1]}**")
-    with h3: st.markdown(f"**{comp_headers[2]}**")
-    with h4: st.markdown(f"**{comp_headers[3]}**")
-    with h5: st.markdown(f"**{comp_headers[4]}**")
-    with h6: st.markdown(f"**{comp_headers[5]}**")
-
-    st.markdown(f"<hr style='border:1px solid {t['border']};margin:0.3rem 0'>", unsafe_allow_html=True)
 
     new_compliances = {}
     new_items = []
     for idx, item in enumerate(comp_data):
         row_id = int(item.get("id", idx))
         saved = saved_compliances.get(row_id, saved_compliances.get(str(row_id), {})) or {}
-        c1, c2, c3, c4, c5, c6 = st.columns(col_widths)
-        with c1:
-            approval = st.text_input("Approval", item.get("approval", ""), key=f"comp_approval_{row_id}", label_visibility="collapsed")
-        with c2:
-            authority = st.text_input("Authority", item.get("authority", ""), key=f"comp_authority_{row_id}", label_visibility="collapsed")
-        with c3:
-            default_days = st.number_input("Approx. Days", 0, 365, int(item.get("default_days", 0)), 5, key=f"comp_default_days_{row_id}", label_visibility="collapsed")
-        with c4:
-            actual = st.number_input("Expected Days", 0, 365, int(saved.get("actual_days", item.get("default_days", 0))), 5, key=f"comp_days_{row_id}", label_visibility="collapsed")
-        with c5:
-            saved_status = saved.get("status", "Not Started")
-            if saved_status not in status_options:
-                saved_status = "Not Started"
-            status = st.selectbox("Status", status_options,
-                                  index=status_options.index(saved_status),
-                                  key=f"comp_status_{row_id}", label_visibility="collapsed")
-        with c6:
-            delete_item = st.button("Delete", key=f"comp_delete_{row_id}", type="secondary")
-        if delete_item:
-            saved_compliances.pop(row_id, None)
-            saved_compliances.pop(str(row_id), None)
-            st.session_state.compliance_items = [x for x in comp_data if int(x.get("id", -1)) != row_id]
-            st.session_state.compliances = saved_compliances
-            st.session_state.inputs_dirty = True
-            st.rerun()
+        
+        with st.container(border=True):
+            c1, c2, c3, c4, c5, c6 = st.columns(col_widths)
+            with c1:
+                approval = st.text_input("Statutory Approval", item.get("approval", ""), key=f"comp_approval_{row_id}")
+            with c2:
+                authority = st.text_input("Issuing Authority", item.get("authority", ""), key=f"comp_authority_{row_id}")
+            with c3:
+                default_days = st.number_input("Approx. Days", 0, 365, int(item.get("default_days", 0)), 5, key=f"comp_default_days_{row_id}")
+            with c4:
+                actual = st.number_input("Expected Days", 0, 365, int(saved.get("actual_days", item.get("default_days", 0))), 5, key=f"comp_days_{row_id}")
+            with c5:
+                saved_status = saved.get("status", "Not Started")
+                if saved_status not in status_options:
+                    saved_status = "Not Started"
+                status = st.selectbox("Status", status_options,
+                                      index=status_options.index(saved_status),
+                                      key=f"comp_status_{row_id}")
+            with c6:
+                st.markdown("<div style='margin-top: 1.8rem;'></div>", unsafe_allow_html=True)
+                delete_item = st.button("Delete", key=f"comp_delete_{row_id}", type="secondary")
+            
+            if delete_item:
+                saved_compliances.pop(row_id, None)
+                saved_compliances.pop(str(row_id), None)
+                st.session_state.compliance_items = [x for x in comp_data if int(x.get("id", -1)) != row_id]
+                st.session_state.compliances = saved_compliances
+                st.session_state.inputs_dirty = True
+                st.rerun()
 
         new_items.append({
             "id": row_id,
